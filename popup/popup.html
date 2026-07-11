@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <img src="../icons/icon48.png" width="28" height="28" alt="" class="popup-icon">
+      <div class="popup-header-text">
+        <h1>下载助手 B站</h1>
+        <span id="app-version" class="popup-version"></span>
+      </div>
+    </header>
+
+    <main class="popup-body">
+      <div id="state-loading" class="popup-loading">正在识别页面…</div>
+
+      <div id="state-video" class="hidden">
+        <div class="popup-detect">
+          <span class="popup-dot"></span>
+          <span>已识别视频页面</span>
+          <span class="popup-tag">B站 · 详情</span>
+          <span class="popup-badge">可用</span>
+        </div>
+
+        <div class="popup-video-card">
+          <div class="popup-cover-wrap">
+            <img id="video-cover" class="popup-cover hidden" alt="">
+            <div id="video-cover-ph" class="popup-cover-ph">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+          <div class="popup-video-meta">
+            <div id="video-title" class="video-title"></div>
+            <div id="video-author" class="video-author hidden"></div>
+            <div id="video-sub" class="video-sub"></div>
+          </div>
+        </div>
+
+        <div id="video-pages" class="popup-pages hidden"></div>
+
+        <div class="popup-section">
+          <div class="popup-section-head">可用清晰度</div>
+          <div id="quality-tags" class="popup-quality-tags"></div>
+        </div>
+
+        <div class="popup-meta-row">
+          <span class="popup-meta-tag">格式 MP4</span>
+          <span id="max-quality" class="popup-meta-tip">源最高 —</span>
+        </div>
+
+        <ul class="popup-tips">
+          <li>在页面右下角悬浮面板选择清晰度并下载</li>
+          <li>登录 B 站账号可获得更高清晰度</li>
+          <li>下载失败时先播放几秒视频再试</li>
+        </ul>
+
+        <button id="btn-open-panel" type="button" class="popup-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          打开下载面板
+        </button>
+      </div>
+
+      <div id="state-empty" class="hidden">
+        <div class="popup-detect warn">
+          <span class="popup-dot warn"></span>
+          <span>未识别到 B 站视频页</span>
+        </div>
+        <div class="popup-empty-card">
+          <p class="popup-empty-title">请先打开视频页面</p>
+          <p class="popup-empty-desc">支持以下页面：</p>
+          <ul class="popup-empty-list">
+            <li>bilibili.com/video/*</li>
+            <li>bilibili.com/bangumi/play/*</li>
+          </ul>
+        </div>
+        <ul class="popup-tips">
+          <li>打开视频页后点击扩展图标即可查看详情</li>
+          <li>固定格式 MP4，仅支持视频下载</li>
+        </ul>
+      </div>
+
+      <div id="state-error" class="hidden">
+        <div class="popup-detect error">
+          <span class="popup-dot error"></span>
+          <span id="error-text">加载失败</span>
+        </div>
+        <p class="popup-error-hint">请刷新 B 站视频页后重试</p>
+      </div>
+    </main>
+
+    <footer class="popup-footer">
+      <div class="popup-footer-line">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        仅供个人学习 · 请遵守 B 站用户协议
+      </div>
+      <a id="feedback-qq" class="popup-feedback" href="tencent://message/?uin=748604487&amp;Site=qq&amp;Menu=yes" title="点击打开 QQ 并复制号码">
+        有问题请反馈 QQ：748604487
+      </a>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

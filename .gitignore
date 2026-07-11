@@ -1,0 +1,13 @@
+# 构建产物
+bilibili-downloader.zip
+
+# 测试依赖
+test/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统
+.DS_Store
+Thumbs.db

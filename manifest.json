@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "B站视频下载助手",
+  "version": "1.0.0",
+  "description": "在 B 站视频页将视频保存为 MP4，支持清晰度选择与音视频合并。仅供个人学习，请遵守 B 站用户协议与版权规定。不收集、不上传任何用户数据。",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.bilibili.com/*",
+    "https://*.bilivideo.com/*",
+    "https://*.bilivideo.cn/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.bilibili.com/video/*",
+        "https://www.bilibili.com/bangumi/play/*",
+        "https://bilibili.com/video/*",
+        "https://m.bilibili.com/video/*"
+      ],
+      "js": ["content/page-agent.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.bilibili.com/video/*",
+        "https://www.bilibili.com/bangumi/play/*",
+        "https://bilibili.com/video/*",
+        "https://m.bilibili.com/video/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "icons/icon48.png", "icons/icon128.png"],
+      "matches": ["https://*.bilibili.com/*"]
+    }
+  ]
+}
