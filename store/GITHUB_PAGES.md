@@ -66,6 +66,39 @@ https://你的用户名.github.io/bilibili-downloader/privacy.html
 
 Pages 会自动重新部署。
 
+## 六、常见问题 FAQ（v1.2+）
+
+FAQ 源文件：
+
+- `docs/faq.html`（GitHub Pages 对外访问）
+- `store/faq.html`（本地备份，与 docs 同步）
+
+**对外 URL（仓库名 `bili-downloader`、用户 `snowflake-hangdudu` 时）：**
+
+```
+https://snowflake-hangdudu.github.io/bili-downloader/faq.html
+```
+
+### 首次发布 FAQ
+
+```bash
+cd bilibili-downloader
+git add docs/faq.html store/faq.html docs/index.html
+git commit -m "Add FAQ page"
+git push
+```
+
+等待 1～3 分钟，浏览器打开上述 URL 应能看到「常见问题」页面。
+
+> **若 404**：说明尚未 push，或 Pages 未开启 / 未选 `/docs` 目录。FAQ 与隐私政策共用同一 Pages 站点，无需额外配置。
+
+### 更新 FAQ
+
+1. 同时改 `docs/faq.html` 与 `store/faq.html`
+2. `git push` 即可
+
+扩展内「常见问题」链接指向上述 Pages URL，**不会**打进 zip 包。
+
 ## 不想公开源码？
 
 可另建小仓库 **仅含隐私页**：

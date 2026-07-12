@@ -27,10 +27,29 @@ function formatTime(ts) {
 }
 
 function isBiliVideoUrl(url) {
-  return url && (
-    url.includes('bilibili.com/video/') ||
-    url.includes('bilibili.com/bangumi/play/')
-  );
+  return url && url.includes('bilibili.com/video/');
+}
+
+function formatCurrentSite(url) {
+  if (!url) return '当前页面：—';
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return '当前页面：' + u.protocol.replace(':', '');
+    }
+    let path = u.pathname;
+    if (path.length > 24) path = path.slice(0, 24) + '…';
+    const suffix = path && path !== '/' ? path : '';
+    return '当前页面：' + u.hostname + suffix;
+  } catch {
+    return '当前页面：未知';
+  }
+}
+
+function showEmptyState(tab) {
+  const siteEl = $('empty-current-site');
+  if (siteEl) siteEl.textContent = formatCurrentSite(tab?.url);
+  showState('state-empty');
 }
 
 function showState(name) {
@@ -50,16 +69,6 @@ function readPageState() {
       view: v.stat?.view,
       pubdate: v.pubdate,
       pages: v.pages?.length || 1
-    };
-  }
-  if (state?.epInfo || state?.mediaInfo) {
-    return {
-      title: state.epInfo?.longTitle || state.epInfo?.title || state.mediaInfo?.title || '',
-      author: state.mediaInfo?.title || '',
-      pic: state.epInfo?.cover || state.mediaInfo?.cover || '',
-      view: 0,
-      pubdate: 0,
-      pages: 1
     };
   }
   return null;
@@ -110,7 +119,7 @@ function renderVideo(data) {
   }
 
   const pagesEl = $('video-pages');
-  if (info.pages?.length > 1) {
+  if (info.pages?.length > 1 && info.pages.every((p) => p && p.cid)) {
     pagesEl.classList.remove('hidden');
     pagesEl.innerHTML = info.pages
       .map((p) => `<span class="popup-page-tag">P${p.page}${p.part ? ' ' + p.part : ''}</span>`)
@@ -129,6 +138,16 @@ function renderVideo(data) {
   }
 
   $('max-quality').textContent = data.maxLabel ? `源最高 ${data.maxLabel}` : '源最高 —';
+
+  const loginHintEl = $('login-hint');
+  if (data.loginHint) {
+    loginHintEl.textContent = data.loginHint;
+    loginHintEl.classList.remove('hidden');
+  } else {
+    loginHintEl.textContent = '';
+    loginHintEl.classList.add('hidden');
+  }
+
   $('btn-open-panel').disabled = !qualities.length;
 }
 
@@ -137,7 +156,7 @@ async function init() {
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url || !isBiliVideoUrl(tab.url)) {
-    showState('state-empty');
+    showEmptyState(tab);
     return;
   }
 
@@ -185,6 +204,17 @@ async function init() {
       window.close();
     } catch {
       $('error-text').textContent = '无法打开面板，请刷新视频页';
+      showState('state-error');
+    }
+  });
+
+  $('btn-retry')?.addEventListener('click', async () => {
+    if (!tabId) return;
+    try {
+      await chrome.tabs.reload(tabId);
+      window.close();
+    } catch {
+      $('error-text').textContent = '无法刷新页面，请手动 F5';
       showState('state-error');
     }
   });

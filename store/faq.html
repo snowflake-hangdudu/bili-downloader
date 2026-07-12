@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B站视频下载助手 - 常见问题</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1e293b; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 16px; margin-top: 28px; scroll-margin-top: 16px; }
+    p, li { font-size: 14px; color: #334155; }
+    .muted { color: #64748b; font-size: 13px; }
+    a { color: #2563eb; }
+    nav { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin: 20px 0; font-size: 13px; }
+    nav a { display: inline-block; margin: 4px 12px 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>B站视频下载助手 · 常见问题</h1>
+  <p class="muted">最后更新：2026-07-13 · 版本 1.2.0 · 与 docs/faq.html 同步</p>
+
+  <p>本页解答下载失败、清晰度、分 P 队列等常见问题。扩展完全免费，不收集用户数据。</p>
+
+  <nav>
+    <strong>快速跳转：</strong>
+    <a href="#login">需要登录吗</a>
+    <a href="#quality">清晰度</a>
+    <a href="#cdn-403">403 / CDN 失败</a>
+    <a href="#merge-slow">合并很慢</a>
+    <a href="#queue-download">分 P 队列</a>
+    <a href="#file-size">文件过大</a>
+    <a href="#download-fail">其他失败</a>
+  </nav>
+
+  <h2 id="login">需要登录 B 站吗？</h2>
+  <p><strong>扩展不强制登录。</strong>但未登录时，B 站通常只提供 360P / 480P，有时 720P。登录后可能解锁 1080P 等更高清晰度（取决于视频片源与你的账号权限，大会员可解锁更高）。</p>
+  <p>若面板显示「源最高 720P」或更低，可尝试：① 登录 B 站账号；② 刷新视频页；③ 重新打开下载面板。</p>
+
+  <h2 id="quality">为什么最高只有 720P / 没有 1080P？</h2>
+  <ul>
+    <li>B 站 API 返回的片源决定实际上限，扩展会过滤「虚假的 1080P」选项</li>
+    <li>未登录或非大会员账号，B 站可能不开放高清片源</li>
+    <li>部分 UP 主上传的源本身较低清</li>
+  </ul>
+
+  <h2 id="cdn-403">下载失败、403、CDN 不可用怎么办？</h2>
+  <ol>
+    <li><strong>先播放视频 5～10 秒</strong>，再点下载（让浏览器建立 CDN 连接）</li>
+    <li>尝试切换 <strong>720P</strong> 等较低清晰度</li>
+    <li>确认已登录 B 站（如需高清）</li>
+    <li>刷新页面（F5）后重试</li>
+    <li>仍失败请通过 QQ <strong>748604487</strong> 反馈，附上视频链接与所选清晰度</li>
+  </ol>
+
+  <h2 id="merge-slow">合并阶段很久 / 像卡住了？</h2>
+  <p>1080P 及以上为 DASH 分轨，需在本机用 JavaScript 合并音视频。文件越大，合并越久，<strong>属于正常现象</strong>。面板会显示「合并音视频」阶段。</p>
+  <p>超过约 1.5GB 的合并会被拒绝，请选择较低清晰度。下载前可查看「预计大小」。</p>
+
+  <h2 id="queue-download">分 P 队列下载怎么用？</h2>
+  <p>多 P 视频（合集）在面板中会显示「队列下载全部 N 个分 P」。点击后按 P1 → P2 → … 顺序依次下载，每个分 P 保存为独立 MP4 文件。</p>
+  <ul>
+    <li>「开始下载」仅下载当前选中的分 P</li>
+    <li>队列下载期间可暂停 / 取消当前分 P</li>
+    <li>取消会停止后续分 P，已完成的文件会保留</li>
+  </ul>
+
+  <h2 id="file-size">提示文件过大？</h2>
+  <p>为保护浏览器内存，合并总大小超过约 1.5GB 时会拒绝并提示选择低清。长视频 1080P 建议分段观看或选 720P 下载。</p>
+
+  <h2 id="download-fail">其他下载失败</h2>
+  <ul>
+    <li><strong>合并组件未加载</strong>：刷新 B 站视频页（F5），重新加载扩展</li>
+    <li><strong>页面代理超时</strong>：刷新页面；网络不稳定时可换清晰度重试</li>
+    <li><strong>无视频流</strong>：先点击播放，再下载</li>
+    <li><strong>不支持番剧页</strong>：本扩展仅支持普通 <code>/video/BV…</code> 详情页</li>
+  </ul>
+
+  <h2>联系我们</h2>
+  <p>QQ：<strong>748604487</strong>（反馈问题时请提供视频链接、清晰度、错误提示截图）</p>
+</body>
+</html>

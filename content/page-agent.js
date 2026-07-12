@@ -36,6 +36,11 @@
     64: '720P', 32: '480P', 16: '360P', 6: '240P'
   };
 
+  const PROBE_TIMEOUT_MS = 4000;
+  const PROBE_PARALLEL = 3;
+  /** 会话内缓存探测成功的镜像 hostname，同页后续下载优先复用 */
+  const sessionMirrorCache = new Set();
+
   function reply(id, payload) {
     window.postMessage({ source: AGENT, id, ...payload }, '*');
   }
@@ -79,7 +84,8 @@
       if (BAD_HOST_PATTERNS.some((re) => re.test(u.hostname))) return false;
       if (u.pathname.startsWith('/v1/resource')) return false;
       if (/mcdn\.bilivideo\.cn:\d+/i.test(u.host)) return false;
-      return u.hostname.includes('upos') && u.hostname.includes('bilivideo');
+      // upos DASH 节点 + 低清 durl 的 cn-* 节点
+      return /\.bilivideo\.(com|cn)$/i.test(u.hostname);
     } catch {
       return false;
     }
@@ -91,7 +97,19 @@
     if (/upos-sz-mirror/.test(url)) return 95;
     if (/upos/.test(url) && !/estgoss/.test(url)) return 80;
     if (/upos/.test(url)) return 60;
+    if (/\.bilivideo\.(com|cn)/i.test(url)) return 50;
     return 0;
+  }
+
+  function extractDurlUrls(item) {
+    if (!item) return [];
+    const urls = [];
+    if (item.url) urls.push(item.url);
+    const backups = item.backup_url || item.backupUrl;
+    if (Array.isArray(backups)) urls.push(...backups);
+    else if (backups) urls.push(backups);
+    return [...new Set(urls)].filter(isDownloadableCdnUrl)
+      .sort((a, b) => urlScore(b) - urlScore(a));
   }
 
   function extractStreamUrls(item) {
@@ -144,9 +162,22 @@
     return ordered;
   }
 
+  function rememberMirrorHost(url) {
+    const host = hostFromUrl(url);
+    if (host) sessionMirrorCache.add(host);
+  }
+
+  function prioritizeCandidates(candidates) {
+    return [...candidates].sort((a, b) => {
+      const ca = sessionMirrorCache.has(hostFromUrl(a)) ? 1 : 0;
+      const cb = sessionMirrorCache.has(hostFromUrl(b)) ? 1 : 0;
+      return cb - ca;
+    });
+  }
+
   async function probeCdn(url) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         method: 'GET',
@@ -165,15 +196,39 @@
   }
 
   async function pickWorkingUrl(url, preferHost) {
-    const candidates = buildCdnCandidates(url, preferHost);
-    for (const u of candidates) {
-      const host = new URL(u).hostname;
-      log('探测', host);
+    const candidates = prioritizeCandidates(buildCdnCandidates(url, preferHost));
+    const tried = new Set();
+
+    async function tryOne(u, tag) {
+      if (!u || tried.has(u)) return null;
+      tried.add(u);
+      const host = hostFromUrl(u);
+      log('探测', tag ? `${host} (${tag})` : host);
       if (await probeCdn(u)) {
+        rememberMirrorHost(u);
         log('探测', '可用 ' + host);
         return u;
       }
       log('探测', '不可用 ' + host);
+      return null;
+    }
+
+    if (preferHost) {
+      const hit = await tryOne(rewriteCdnUrl(url, preferHost), '嗅探');
+      if (hit) return hit;
+    }
+
+    for (const host of sessionMirrorCache) {
+      const hit = await tryOne(rewriteCdnUrl(url, host), '缓存');
+      if (hit) return hit;
+    }
+
+    const rest = candidates.filter((u) => !tried.has(u));
+    for (let i = 0; i < rest.length; i += PROBE_PARALLEL) {
+      const batch = rest.slice(i, i + PROBE_PARALLEL);
+      const results = await Promise.all(batch.map((u) => tryOne(u, null)));
+      const hit = results.find(Boolean);
+      if (hit) return hit;
     }
     return null;
   }
@@ -211,8 +266,84 @@
       pic: data.pic || '',
       author: data.owner?.name || data.staff || '',
       view: data.stat?.view ?? 0,
-      pubdate: data.pubdate || 0
+      pubdate: data.pubdate || 0,
+      duration: page?.duration || data.duration || 0
     };
+  }
+
+  function isLoggedIn() {
+    return /(?:^|;\s*)DedeUserID=\d+/i.test(document.cookie || '');
+  }
+
+  function formatSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return n + ' B';
+  }
+
+  function buildLoginHint(maxDashQn) {
+    const loggedIn = isLoggedIn();
+    if (!loggedIn && maxDashQn <= 64) {
+      return '未登录时 B 站通常仅提供低清。登录并刷新页面后，可尝试更高清晰度';
+    }
+    if (!loggedIn && maxDashQn > 0 && maxDashQn < 80) {
+      return '登录 B 站账号后，可能解锁 1080P 等更高清晰度（视视频与账号而定）';
+    }
+    if (loggedIn && maxDashQn > 0 && maxDashQn <= 64) {
+      return '当前账号在该视频最高约 ' + (QUALITY_MAP[maxDashQn] || maxDashQn + 'P') + '，大会员可解锁更高（若片源支持）';
+    }
+    return null;
+  }
+
+  async function estimateDownloadSize(aid, cid, qn, durationSec) {
+    const dur = Math.max(Number(durationSec) || 0, 1);
+
+    if (qn <= 64) {
+      try {
+        const durl = await apiGet(
+          `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
+        );
+        if (durl.durl?.[0]?.size) {
+          const sizeBytes = durl.durl[0].size;
+          return {
+            sizeBytes,
+            sizeLabel: formatSize(sizeBytes),
+            estimateNote: '单文件含音视频'
+          };
+        }
+      } catch { /* fallback to dash estimate */ }
+    }
+
+    try {
+      const dash = await apiGet(
+        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=16&fourk=1&platform=pc`
+      );
+      if (dash.dash?.video?.length) {
+        const video = dash.dash.video.find((v) => v.id === qn) || dash.dash.video[0];
+        const audio = (dash.dash.audio || []).sort((a, b) => b.id - a.id)[0];
+        let bytes = 0;
+        if (video?.bandwidth) bytes += (video.bandwidth * dur) / 8;
+        if (audio?.bandwidth) bytes += (audio.bandwidth * dur) / 8;
+        if (bytes > 0) {
+          return {
+            sizeBytes: Math.round(bytes),
+            sizeLabel: formatSize(bytes),
+            estimateNote: '按码率估算，合并后体积可能略有出入'
+          };
+        }
+      }
+      if (dash.durl?.[0]?.size) {
+        return {
+          sizeBytes: dash.durl[0].size,
+          sizeLabel: formatSize(dash.durl[0].size),
+          estimateNote: null
+        };
+      }
+    } catch { /* ignore */ }
+
+    return { sizeBytes: 0, sizeLabel: '未知', estimateNote: null };
   }
 
   async function getQualities(aid, cid) {
@@ -261,7 +392,8 @@
     return {
       qualities: qualities.sort((a, b) => b.qn - a.qn),
       maxQn: maxDashQn,
-      maxLabel: QUALITY_MAP[maxDashQn] || (maxDashQn ? maxDashQn + 'P' : '')
+      maxLabel: QUALITY_MAP[maxDashQn] || (maxDashQn ? maxDashQn + 'P' : ''),
+      loginHint: buildLoginHint(maxDashQn)
     };
   }
 
@@ -273,8 +405,12 @@
           `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
         );
         if (durl.durl?.length) {
-          log('步骤3', `低清 ${qn}P 使用 durl 单文件 (${(durl.durl[0].size / 1024 / 1024).toFixed(1)}MB)`);
-          return { type: 'durl', url: durl.durl[0].url };
+          const urls = extractDurlUrls(durl.durl[0]);
+          if (urls.length) {
+            log('步骤3', `低清 ${qn}P 使用 durl 单文件 (${(durl.durl[0].size / 1024 / 1024).toFixed(1)}MB)`);
+            return { type: 'durl', urls };
+          }
+          log('步骤3', 'durl 地址不可用，回退 DASH');
         }
       } catch (e) {
         log('步骤3', 'durl 获取失败，回退 DASH: ' + e.message);
@@ -313,7 +449,10 @@
     const durl = await apiGet(
       `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
     );
-    if (durl.durl?.length) return { type: 'durl', url: durl.durl[0].url };
+    if (durl.durl?.length) {
+      const urls = extractDurlUrls(durl.durl[0]);
+      if (urls.length) return { type: 'durl', urls };
+    }
     throw new Error('无法获取播放流');
   }
 
@@ -335,58 +474,235 @@
     try { return new URL(url).hostname; } catch { return null; }
   }
 
-  async function pageDownload(urls, onProgress, preferHost) {
+  const dlCtrl = {
+    paused: false,
+    cancelled: false,
+    abortController: null,
+    controllers: {},
+    trackProgress: {},
+    pauseWait: null,
+    lastProgress: null
+  };
+
+  function initDownloadControl() {
+    dlCtrl.paused = false;
+    dlCtrl.cancelled = false;
+    dlCtrl.abortController = null;
+    dlCtrl.controllers = {};
+    dlCtrl.trackProgress = {};
+    dlCtrl.pauseWait = null;
+    dlCtrl.lastProgress = null;
+  }
+
+  function abortAllControllers() {
+    Object.values(dlCtrl.controllers).forEach((c) => c?.abort());
+    dlCtrl.abortController?.abort();
+  }
+
+  function combineTrackProgress() {
+    let received = 0;
+    let total = 0;
+    for (const p of Object.values(dlCtrl.trackProgress)) {
+      received += p.received || 0;
+      total += p.total || 0;
+    }
+    return {
+      received,
+      total,
+      percent: total ? Math.round((received / total) * 100) : 0
+    };
+  }
+
+  function getDisplayProgress() {
+    const vp = dlCtrl.trackProgress.video;
+    if (vp?.total && vp.received < vp.total) {
+      return {
+        received: vp.received,
+        total: vp.total,
+        percent: Math.round((vp.received / vp.total) * 100)
+      };
+    }
+    const ap = dlCtrl.trackProgress.audio;
+    if (ap) {
+      return {
+        received: ap.received || 0,
+        total: ap.total || 0,
+        percent: ap.total ? Math.round((ap.received / ap.total) * 100) : 0
+      };
+    }
+    return combineTrackProgress();
+  }
+
+  function pauseDownloadControl() {
+    if (dlCtrl.cancelled || dlCtrl.paused) return;
+    dlCtrl.paused = true;
+    const p = getDisplayProgress();
+    sendProgress('paused', p.percent || 0, { received: p.received, total: p.total });
+    abortAllControllers();
+  }
+
+  function resumeDownloadControl() {
+    if (dlCtrl.cancelled || !dlCtrl.paused) return;
+    dlCtrl.paused = false;
+    if (dlCtrl.pauseWait) {
+      dlCtrl.pauseWait.resolve();
+      dlCtrl.pauseWait = null;
+    }
+  }
+
+  function cancelDownloadControl() {
+    dlCtrl.cancelled = true;
+    dlCtrl.paused = false;
+    if (dlCtrl.pauseWait) {
+      dlCtrl.pauseWait.resolve();
+      dlCtrl.pauseWait = null;
+    }
+    abortAllControllers();
+  }
+
+  function waitWhilePaused() {
+    if (!dlCtrl.paused || dlCtrl.cancelled) return Promise.resolve();
+    return new Promise((resolve) => {
+      dlCtrl.pauseWait = { resolve };
+    });
+  }
+
+  function throwIfCancelled() {
+    if (dlCtrl.cancelled) throw new Error('下载已取消');
+  }
+
+  function formatDownloadError(err) {
+    const msg = err?.message || String(err);
+    if (msg === '下载已取消') return msg;
+    if (/合并库|合并模块|mp4-remux|BiliM4sMux/.test(msg)) {
+      return '合并组件未就绪，请刷新页面后重试';
+    }
+    if (/无视频流|请先点击播放|请先播放/.test(msg)) {
+      return '未检测到视频流，请先点击播放视频 5～10 秒后再下载';
+    }
+    if (/文件过大/.test(msg)) return msg;
+    if (/403|CDN|镜像|探测|HTTP 4/.test(msg)) {
+      return '下载失败：CDN 不可用。请先播放视频 5～10 秒，或切换 720P 后重试；高清可能需要登录 B 站账号';
+    }
+    if (/所有 CDN/.test(msg)) {
+      return '所有 CDN 镜像均不可用，请先播放视频 5～10 秒后再试，或切换 720P 清晰度';
+    }
+    return msg;
+  }
+
+  async function pageDownload(urls, onProgress, preferHost, trackId = 'default') {
     const list = (Array.isArray(urls) ? urls : [urls]).filter(isDownloadableCdnUrl);
     if (!list.length) throw new Error('无有效 CDN 地址');
 
     let lastErr;
     for (const src of list) {
+      let working = null;
+      let chunks = [];
+      let received = 0;
+      let total = 0;
+
       try {
-        const working = await pickWorkingUrl(src, preferHost);
+        working = await pickWorkingUrl(src, preferHost);
         if (!working) {
           lastErr = new Error('CDN 探测失败: ' + hostFromUrl(src));
           continue;
         }
 
+        rememberMirrorHost(working);
         log('下载', '使用 ' + hostFromUrl(working));
-        const res = await fetch(working, {
-          credentials: 'include',
-          referrer: location.href,
-          referrerPolicy: 'strict-origin-when-cross-origin',
-          headers: { Referer: REFERER }
-        });
-        if (!res.ok) {
-          lastErr = new Error('HTTP ' + res.status + ' (' + hostFromUrl(working) + ')');
-          continue;
-        }
-
-        const total = parseInt(res.headers.get('content-length') || '0', 10);
-        const reader = res.body.getReader();
-        const chunks = [];
-        let received = 0;
 
         while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          received += value.length;
-          if (onProgress) {
-            onProgress({ received, total, percent: total ? Math.round((received / total) * 100) : 0 });
-          }
-        }
+          throwIfCancelled();
+          dlCtrl.abortController = new AbortController();
+          dlCtrl.controllers[trackId] = dlCtrl.abortController;
+          const headers = { Referer: REFERER };
+          if (received > 0) headers.Range = `bytes=${received}-`;
 
-        log('下载', '成功 ' + (received / 1024 / 1024).toFixed(1) + 'MB');
-        if (received < 1024) {
-          lastErr = new Error('下载内容为空');
-          continue;
+          let res;
+          try {
+            res = await fetch(working, {
+              credentials: 'include',
+              referrer: location.href,
+              referrerPolicy: 'strict-origin-when-cross-origin',
+              headers,
+              signal: dlCtrl.abortController.signal
+            });
+          } catch (e) {
+            if (dlCtrl.cancelled) throw new Error('下载已取消');
+            if (dlCtrl.paused) {
+              await waitWhilePaused();
+              throwIfCancelled();
+              continue;
+            }
+            throw e;
+          }
+
+          if (!res.ok && !(received > 0 && res.status === 206)) {
+            lastErr = new Error('HTTP ' + res.status + ' (' + hostFromUrl(working) + ')');
+            break;
+          }
+
+          if (received === 0) {
+            const contentRange = res.headers.get('content-range');
+            if (contentRange) {
+              const m = contentRange.match(/\/(\d+)\s*$/);
+              if (m) total = parseInt(m[1], 10);
+            }
+            if (!total) total = parseInt(res.headers.get('content-length') || '0', 10);
+          }
+
+          const reader = res.body.getReader();
+          let needResume = false;
+
+          try {
+            while (true) {
+              throwIfCancelled();
+              let readResult;
+              try {
+                readResult = await reader.read();
+              } catch (e) {
+                if (dlCtrl.cancelled) throw new Error('下载已取消');
+                if (dlCtrl.paused) {
+                  needResume = true;
+                  break;
+                }
+                throw e;
+              }
+
+              const { done, value } = readResult;
+              if (done) break;
+
+              chunks.push(value);
+              received += value.length;
+              const progress = { received, total, percent: total ? Math.round((received / total) * 100) : 0 };
+              dlCtrl.trackProgress[trackId] = progress;
+              dlCtrl.lastProgress = progress;
+              if (onProgress) onProgress(progress);
+            }
+          } finally {
+            try { reader.releaseLock(); } catch { /* ignore */ }
+          }
+
+          if (needResume) {
+            await waitWhilePaused();
+            throwIfCancelled();
+            continue;
+          }
+
+          log('下载', '成功 ' + (received / 1024 / 1024).toFixed(1) + 'MB');
+          if (received < 1024) {
+            lastErr = new Error('下载内容为空');
+            break;
+          }
+          return new Blob(chunks);
         }
-        return new Blob(chunks);
       } catch (e) {
+        if (e.message === '下载已取消') throw e;
         lastErr = e;
         log('下载', '失败 ' + (e.message || e));
       }
     }
-    throw lastErr || new Error('所有 CDN 镜像均不可用，请先播放几秒视频后重试');
+    throw new Error(formatDownloadError(lastErr || { message: '所有 CDN 镜像均不可用' }));
   }
 
   function saveBlob(blob, filename) {
@@ -402,11 +718,11 @@
     }, 5000);
   }
 
-  async function mergeM4sInPage(videoBuffer, audioBuffer) {
-    if (!videoBuffer?.byteLength) throw new Error('视频数据为空');
-    if (!audioBuffer?.byteLength) throw new Error('音频数据为空');
+  async function mergeM4sInPage(videoBlob, audioBlob) {
+    if (!videoBlob?.size) throw new Error('视频数据为空');
+    if (!audioBlob?.size) throw new Error('音频数据为空');
 
-    const totalMB = (videoBuffer.byteLength + audioBuffer.byteLength) / 1024 / 1024;
+    const totalMB = (videoBlob.size + audioBlob.size) / 1024 / 1024;
     if (totalMB > 1500) {
       throw new Error(`文件过大 (${totalMB.toFixed(0)}MB)，请选低清晰度`);
     }
@@ -420,22 +736,33 @@
 
     log('合并', `纯JS合并中 (${totalMB.toFixed(1)}MB)...`);
     const t0 = Date.now();
+    const videoBuffer = await videoBlob.arrayBuffer();
+    const audioBuffer = await audioBlob.arrayBuffer();
     const blob = await window.BiliM4sMux.mergeM4s(videoBuffer, audioBuffer, window.mp4Remux);
     log('合并', `完成 ${(blob.size / 1024 / 1024).toFixed(1)}MB (${Date.now() - t0}ms)`);
     return blob;
   }
 
+  function sendProgress(step, percent, extra) {
+    reply(null, { type: 'PROGRESS', step, percent, ...extra });
+  }
+
   async function handleDownload(aid, cid, qn, title) {
+    initDownloadControl();
+    try {
     const base = (title || 'video').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
     let streams = await getStreams(aid, cid, qn);
 
     if (streams.type === 'durl') {
+      const urls = streams.urls || [];
+      if (!urls.length) throw new Error('无有效 CDN 地址');
       const sniffed = sniffPlayingUrls();
       const preferHost = hostFromUrl(sniffed.video);
-      reply(null, { type: 'PROGRESS', phase: '下载视频', progress: 0 });
-      const blob = await pageDownload(streams.url, (p) => {
-        reply(null, { type: 'PROGRESS', phase: '下载中', progress: p.percent });
+      sendProgress('download', 0);
+      const blob = await pageDownload(urls, (p) => {
+        sendProgress('download', p.percent, { received: p.received, total: p.total });
       }, preferHost);
+      sendProgress('save', 100);
       saveBlob(blob, base + '.mp4');
       return { dash: false };
     }
@@ -454,45 +781,81 @@
     if (!videoUrl) throw new Error('无视频流，请先点击播放视频再下载');
     if (preferHost) log('步骤3', '嗅探到播放节点 ' + preferHost);
 
-    reply(null, { type: 'PROGRESS', phase: '下载视频流', progress: 0 });
-    const vBlob = await pageDownload(videoUrls, (p) => {
-      reply(null, { type: 'PROGRESS', phase: `视频 ${p.percent}%`, progress: Math.floor(p.percent / 2) });
-    }, preferHost);
-    log('下载', `视频轨 ${(vBlob.size / 1024 / 1024).toFixed(1)}MB`);
+    const vTrack = { received: 0, total: 0, done: false };
+    const aTrack = { received: 0, total: 0, done: false };
+    const hasAudio = audioUrls.length > 0;
 
-    let aBlob = null;
-    if (audioUrls.length) {
-      reply(null, { type: 'PROGRESS', phase: '下载音频流', progress: 50 });
-      try {
-        aBlob = await pageDownload(audioUrls, (p) => {
-          reply(null, { type: 'PROGRESS', phase: `音频 ${p.percent}%`, progress: 50 + Math.floor(p.percent / 2) });
-        }, preferHost);
-        if (aBlob.size < 1024) {
-          log('下载', '音频流为空');
-          aBlob = null;
-        } else {
-          log('下载', `音频轨 ${(aBlob.size / 1024 / 1024).toFixed(1)}MB`);
-        }
-      } catch (e) {
-        log('下载', '音频下载失败: ' + e.message);
+    /** 并行下载，但 UI 分阶段：先视频流，视频完成后再显示音频流 */
+    function sendDashProgress() {
+      const vPct = vTrack.total
+        ? Math.min(100, Math.round((vTrack.received / vTrack.total) * 100))
+        : 0;
+
+      if (!vTrack.done) {
+        sendProgress('video', vPct, { received: vTrack.received, total: vTrack.total });
+        return;
+      }
+      if (hasAudio) {
+        const aPct = aTrack.total
+          ? Math.min(100, Math.round((aTrack.received / aTrack.total) * 100))
+          : (aTrack.done ? 100 : 0);
+        sendProgress('audio', aPct, { received: aTrack.received, total: aTrack.total });
       }
     }
 
+    sendProgress('video', 0);
+
+    const videoPromise = pageDownload(videoUrls, (p) => {
+      Object.assign(vTrack, p);
+      sendDashProgress();
+    }, preferHost, 'video').then((blob) => {
+      vTrack.done = true;
+      sendDashProgress();
+      return blob;
+    });
+
+    const audioPromise = hasAudio
+      ? pageDownload(audioUrls, (p) => {
+          Object.assign(aTrack, p);
+          if (vTrack.done) sendDashProgress();
+        }, preferHost, 'audio').then((blob) => {
+          aTrack.done = true;
+          if (vTrack.done) sendDashProgress();
+          return blob;
+        }).catch((e) => {
+          if (e.message === '下载已取消') throw e;
+          log('下载', '音频下载失败: ' + e.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const [vBlob, aBlobRaw] = await Promise.all([videoPromise, audioPromise]);
+    log('下载', `视频轨 ${(vBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+    let aBlob = aBlobRaw;
+    if (aBlob && aBlob.size < 1024) {
+      log('下载', '音频流为空');
+      aBlob = null;
+    } else if (aBlob) {
+      log('下载', `音频轨 ${(aBlob.size / 1024 / 1024).toFixed(1)}MB`);
+    }
+
     if (aBlob) {
-      reply(null, { type: 'PROGRESS', phase: '合并音视频', progress: 80 });
-      const mp4Blob = await mergeM4sInPage(
-        await vBlob.arrayBuffer(),
-        await aBlob.arrayBuffer()
-      );
+      sendProgress('merge');
+      const mp4Blob = await mergeM4sInPage(vBlob, aBlob);
+      sendProgress('save', 100);
       return {
         merged: true,
         filename: base + '.mp4',
-        mp4: await mp4Blob.arrayBuffer()
+        blob: mp4Blob
       };
     }
 
     saveBlob(vBlob, base + '_video.m4s');
     return { dash: true, videoOnly: true };
+    } finally {
+      initDownloadControl();
+    }
   }
 
   window.addEventListener('message', async (e) => {
@@ -510,16 +873,36 @@
         case 'GET_QUALITIES':
           reply(id, { type: 'OK', data: await getQualities(e.data.aid, e.data.cid) });
           break;
+        case 'GET_ESTIMATE':
+          reply(id, {
+            type: 'OK',
+            data: await estimateDownloadSize(
+              e.data.aid,
+              e.data.cid,
+              e.data.qn,
+              e.data.duration
+            )
+          });
+          break;
         case 'START_DOWNLOAD': {
           const result = await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title);
           reply(id, { type: 'OK', data: result });
           break;
         }
+        case 'PAUSE_DOWNLOAD':
+          pauseDownloadControl();
+          break;
+        case 'RESUME_DOWNLOAD':
+          resumeDownloadControl();
+          break;
+        case 'CANCEL_DOWNLOAD':
+          cancelDownloadControl();
+          break;
         default:
           reply(id, { type: 'ERR', error: '未知请求: ' + type });
       }
     } catch (err) {
-      reply(id, { type: 'ERR', error: err.message || String(err) });
+      reply(id, { type: 'ERR', error: formatDownloadError(err) });
     }
   });
 

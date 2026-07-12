@@ -15,7 +15,34 @@
     </header>
 
     <main class="popup-body">
-      <div id="state-loading" class="popup-loading">正在识别页面…</div>
+      <div id="state-loading">
+        <div class="popup-detect loading">
+          <span class="popup-dot pulse"></span>
+          <span>正在识别页面…</span>
+        </div>
+
+        <div class="popup-video-card is-loading">
+          <div class="popup-cover-wrap">
+            <div class="popup-sk-cover popup-shimmer"></div>
+          </div>
+          <div class="popup-video-meta">
+            <div class="popup-video-sk">
+              <span class="popup-sk-line popup-shimmer"></span>
+              <span class="popup-sk-line popup-shimmer short"></span>
+              <span class="popup-sk-line popup-shimmer shorter"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="popup-section">
+          <div class="popup-section-head">可用清晰度</div>
+          <div class="popup-quality-tags">
+            <span class="popup-q-tag loading popup-shimmer w1">加载中</span>
+            <span class="popup-q-tag loading popup-shimmer w2"></span>
+            <span class="popup-q-tag loading popup-shimmer w3"></span>
+          </div>
+        </div>
+      </div>
 
       <div id="state-video" class="hidden">
         <div class="popup-detect">
@@ -51,10 +78,12 @@
           <span id="max-quality" class="popup-meta-tip">源最高 —</span>
         </div>
 
-        <ul class="popup-tips">
-          <li>在页面右下角悬浮面板选择清晰度并下载</li>
-          <li>登录 B 站账号可获得更高清晰度</li>
-          <li>下载失败时先播放几秒视频再试</li>
+        <div id="login-hint" class="popup-login-hint hidden"></div>
+
+        <ul class="popup-tips compact">
+          <li>实际下载在页面右下角悬浮面板操作</li>
+          <li>多 P 视频可在面板「队列下载全部」</li>
+          <li>下载失败？<a id="popup-faq-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">查看常见问题</a></li>
         </ul>
 
         <button id="btn-open-panel" type="button" class="popup-btn">
@@ -68,18 +97,43 @@
           <span class="popup-dot warn"></span>
           <span>未识别到 B 站视频页</span>
         </div>
-        <div class="popup-empty-card">
-          <p class="popup-empty-title">请先打开视频页面</p>
-          <p class="popup-empty-desc">支持以下页面：</p>
-          <ul class="popup-empty-list">
-            <li>bilibili.com/video/*</li>
-            <li>bilibili.com/bangumi/play/*</li>
-          </ul>
+
+        <div class="popup-empty-hero">
+          <div class="popup-empty-icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="3"/>
+              <path d="M10 9l5 3-5 3V9z"/>
+            </svg>
+          </div>
+          <p class="popup-empty-title">请在 B 站视频页使用</p>
+          <p id="empty-current-site" class="popup-empty-site">当前页面：—</p>
         </div>
-        <ul class="popup-tips">
-          <li>打开视频页后点击扩展图标即可查看详情</li>
-          <li>固定格式 MP4，仅支持视频下载</li>
-        </ul>
+
+        <div class="popup-steps">
+          <div class="popup-step">
+            <span class="popup-step-num">1</span>
+            <span class="popup-step-text">打开 B 站视频播放页</span>
+          </div>
+          <div class="popup-step">
+            <span class="popup-step-num">2</span>
+            <span class="popup-step-text">点击页面右下角悬浮按钮</span>
+          </div>
+          <div class="popup-step">
+            <span class="popup-step-num">3</span>
+            <span class="popup-step-text">选择清晰度，一键下载 MP4</span>
+          </div>
+        </div>
+
+        <div class="popup-feature-tags">
+          <span class="popup-feature-tag">格式 MP4</span>
+          <span class="popup-feature-tag">完全免费</span>
+          <span class="popup-feature-tag">个人学习</span>
+        </div>
+
+        <a id="btn-go-bili" class="popup-btn" href="https://www.bilibili.com" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+          前往 B 站
+        </a>
       </div>
 
       <div id="state-error" class="hidden">
@@ -87,7 +141,11 @@
           <span class="popup-dot error"></span>
           <span id="error-text">加载失败</span>
         </div>
-        <p class="popup-error-hint">请刷新 B 站视频页后重试</p>
+        <div class="popup-empty-hero compact">
+          <p class="popup-empty-title">暂时无法读取视频信息</p>
+          <p class="popup-error-hint">请刷新 B 站视频页后，再点击扩展图标重试</p>
+        </div>
+        <button id="btn-retry" type="button" class="popup-btn popup-btn-outline">刷新并重试</button>
       </div>
     </main>
 
@@ -96,9 +154,12 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         仅供个人学习 · 请遵守 B 站用户协议
       </div>
-      <a id="feedback-qq" class="popup-feedback" href="tencent://message/?uin=748604487&amp;Site=qq&amp;Menu=yes" title="点击打开 QQ 并复制号码">
-        有问题请反馈 QQ：748604487
-      </a>
+      <div class="popup-footer-actions">
+        <a class="popup-faq" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">常见问题</a>
+        <a id="feedback-qq" class="popup-feedback" href="tencent://message/?uin=748604487&amp;Site=qq&amp;Menu=yes" title="点击打开 QQ 并复制号码">
+          反馈 QQ：748604487
+        </a>
+      </div>
     </footer>
   </div>
   <script src="popup.js"></script>
