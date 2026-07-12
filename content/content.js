@@ -336,7 +336,7 @@
     }
 
     function errorFaqAnchor(msg) {
-      if (/403|CDN|镜像|探测/.test(msg)) return 'cdn-403';
+      if (/403|CDN|镜像|探测/.test(msg)) return 'download-fail';
       if (/合并/.test(msg)) return 'merge-slow';
       if (/取消/.test(msg)) return null;
       if (/过大/.test(msg)) return 'file-size';

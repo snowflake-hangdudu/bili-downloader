@@ -1,7 +1,5 @@
 /**
- * 页面上下文代理（MAIN world）
- * 在 B 站页面内发起请求，绕过扩展后台 fetch 的 CDN 403
- * 参考：BiliKit / bilibili-cdn-switcher 的 CDN 镜像替换思路
+ * B站下载 — 页面内下载代理（MAIN world）
  */
 (function () {
   'use strict';
@@ -12,7 +10,7 @@
   const AGENT = 'bili-dl-agent';
 
   const REFERER = 'https://www.bilibili.com/';
-  // 社区常用镜像节点；签名与主机名无关，可替换（BiliKit / cdn-switcher 思路）
+  // 常用镜像节点
   const MIRRORS = [
     'upos-sz-mirrorali.bilivideo.com',
     'upos-sz-mirrorcos.bilivideo.com',
@@ -62,7 +60,7 @@
     return null;
   }
 
-  /** CDN 签名与主机名无关，可换镜像节点（B站社区共识） */
+  /** 换镜像节点 */
   function rewriteCdnUrl(url, mirrorHost) {
     try {
       const u = new URL(url);

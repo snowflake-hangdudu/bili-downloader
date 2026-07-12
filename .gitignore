@@ -1,8 +1,9 @@
 # 构建产物
 bilibili-downloader.zip
 
-# 测试依赖
+# 测试依赖与产物
 test/node_modules/
+test/_out/
 
 # Python
 __pycache__/
