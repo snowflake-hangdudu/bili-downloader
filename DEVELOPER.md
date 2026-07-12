@@ -6,7 +6,26 @@
 
 ---
 
-## 0. 新会话 30 秒上手
+## 0. 协作第一原则（最高优先级）
+
+**能让开发者本人操作的，尽量让本人操作。** 本机环境（Edge 重载扩展、B 站页 F5、`git push`、Pages 验证、商店上传 zip）通常比 Agent 代跑更方便、更可控。
+
+| Agent 应做 | 交给开发者本人 |
+|------------|----------------|
+| 改代码、改文档、列步骤与命令 | `git commit` / `git push`（除非明确要求代做） |
+| 说明「改完后：重载扩展 + F5」 | 本地加载 / 重载扩展、打开 B 站实测 |
+| 写好 pack 命令与 zip 路径 | 运行 `pack.py`、上传 Edge 商店 |
+| FAQ/隐私改完后给 Pages URL | 浏览器打开验证、等 Pages 部署 |
+| 列出可选优化，等确认再写代码 | 产品取舍（做 / 不做合集等） |
+
+**分 P vs 合集（勿混淆）：**
+
+- **分 P**：同一 BV 的 `pages[]`（P1/P2…）→ **已支持**队列下载；单 P 不显示队列按钮  
+- **合集**（视频页右侧系列列表，`ugc_season`，多为不同 BV）→ **暂不做**；当前只下打开的这一集  
+
+---
+
+## 0.1 新会话 30 秒上手
 
 ```text
 项目路径    d:\插件\bilibili-downloader  （GitHub: snowflake-hangdudu/bili-downloader）
@@ -37,6 +56,7 @@
 | 目标用户 | **优先中国人**，界面全中文，`default_locale: zh_CN` |
 | 收费 | **v1.0 全免费**，无内购/激活码 |
 | 功能范围 | **仅普通视频页 MP4**（`/video/BV|av`），**不支持番剧页**；无「仅音频」、无设置/历史/输出页 |
+| 分 P | 仅传统 `pages` 多 P；**不做合集（ugc_season）批量**（见 §0） |
 | 下载 UI | **展示进度条**（真实百分比 + 阶段文字）；支持**暂停/继续/取消**；合并阶段隐藏暂停 |
 | 清晰度 | 以 API 返回为准，**过滤虚假 1080P/4K**；低清 durl 接受 `*.bilivideo.com/cn` CDN |
 | 反馈 | QQ `748604487`，`tencent://` + 复制号码 |
@@ -413,22 +433,34 @@ python scripts/gen_store_assets.py
 
 ---
 
-## 18. v1.3 计划（未实现，仅文档）
+## 18. 后续优化清单（未实现，仅文档）
 
-> v1.2 已实现：分 P 队列、下载预估、登录提示、FAQ。以下为后续项。
+> v1.2 已实现：分 P 队列、下载预估、登录提示、FAQ。合集批量 **不做**（见 §0）。  
+> 改代码前先确认；能本地完成的验证/发布步骤交给开发者本人。
+
+### 内容 / 体验（优先考虑）
+
+| 优先级 | 项 | 说明 |
+|--------|-----|------|
+| 中 | FAQ 写清「分 P ≠ 合集」 | 避免用户把右侧合集列表当成分 P；不写 API 名 |
+| 中 | 进度细化 | 合并阶段显示 MB；下载阶段「已下/总量」；可选 ETA |
+| 中 | SPA 路由监听 | `pushState`/`popstate` 替代 1s 轮询，切视频更快刷新面板 |
+| 低 | popup 文案 | 非视频页 / 多 P 提示再短一点，减少和面板重复 |
+| 低 | 商店更新说明模板 | 每次发版 3 条用户能看懂的变化（本地填 Partner Center） |
+
+### 工程 / 体验（可选）
 
 | 优先级 | 项 | 说明 | 涉及文件 |
 |--------|-----|------|----------|
-| 中 | SPA 路由监听 | 用 `pushState`/`popstate` hook 替代 `setInterval` 轮询 URL | `content.js` |
-| 中 | 进度细化 | 合并阶段显示 MB 数；下载阶段 `已下/总量`；可选 ETA | `content.js` |
-| 低 | `chrome.downloads` | 可选保存路径、浏览器下载管理器集成（需 `downloads` 权限） | `manifest.json`, `content.js` |
-| 低 | FAB 可拖拽 | 避免遮挡播放器控件 | `content.js`, `content.css` |
+| 低 | `chrome.downloads` | 可选保存路径（需新权限，上架要说明） | `manifest.json`, `content.js` |
+| 低 | FAB 可拖拽 | 避免挡播放器控件 | `content.js`, `content.css` |
 | 低 | 键盘快捷键 | 如 `Alt+D` 打开面板 | `content.js` |
 | 低 | 远程镜像配置 | GitHub raw 更新 `MIRRORS`，免发版 | `page-agent.js`, `background.js` |
-| 低 | 单元测试扩展 | mock fetch 测 `getQualities`、CDN 过滤 | `test/` |
-| 低 | popup 选分 P | 「打开面板」时传递 `pageIndex` | `popup.js`, `content.js` |
-| 低 | 工具函数抽取 | `formatView`/`formatTime` 抽到 `lib/format.js` | `lib/`, `content.js`, `popup.js` |
+| 低 | 单元测试扩展 | mock fetch 测清晰度过滤等 | `test/` |
+| 低 | popup 选分 P | 打开面板时带 `pageIndex` | `popup.js`, `content.js` |
+| 低 | 工具函数抽取 | `formatView`/`formatTime` → `lib/format.js` | `lib/`, `content.js`, `popup.js` |
 | 低 | 文件名截断 | 按字符数截断，避免中文乱码 | `page-agent.js` |
+| — | 合集批量下载 | `ugc_season`；**明确搁置** | — |
 
 ---
 
