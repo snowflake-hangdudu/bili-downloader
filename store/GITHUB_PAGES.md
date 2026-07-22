@@ -66,7 +66,7 @@ https://你的用户名.github.io/bilibili-downloader/privacy.html
 
 Pages 会自动重新部署。
 
-## 六、常见问题 FAQ（v1.2+）
+## 六、常见问题 FAQ
 
 FAQ 源文件：
 

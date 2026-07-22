@@ -7,7 +7,9 @@
   const PANEL = 'bili-dl-panel';
   const AGENT = 'bili-dl-agent';
   const VERSION = chrome.runtime.getManifest().version;
-  const ICON_URL = chrome.runtime.getURL('icons/icon128.png');
+  // 图标资源缓存破坏：换图标后递增 ICON_REV，避免只 F5 仍显示旧图
+  const ICON_REV = '22';
+  const ICON_URL = chrome.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
   const FAQ_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/faq.html';
 
   let muxReadyPromise = null;
@@ -296,13 +298,22 @@
     const STEP_LABELS = {
       prepare: '准备下载',
       download: '下载视频',
-      video: '下载视频流',
-      audio: '下载音频流',
+      video: '下载视频',
+      audio: '下载音频',
       merge: '合并音视频',
       save: '保存文件',
       paused: '已暂停',
       queue: '分 P 队列下载'
     };
+
+    function formatBytes(n) {
+      const v = Number(n) || 0;
+      if (v >= 1024 * 1024 * 1024) return (v / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+      if (v >= 1024 * 1024) return (v / 1024 / 1024).toFixed(1) + ' MB';
+      if (v >= 1024) return Math.round(v / 1024) + ' KB';
+      if (v > 0) return v + ' B';
+      return '0 B';
+    }
 
     function setLoginHint(text) {
       if (text) {
@@ -336,10 +347,9 @@
     }
 
     function errorFaqAnchor(msg) {
-      if (/403|CDN|镜像|探测/.test(msg)) return 'download-fail';
-      if (/合并/.test(msg)) return 'merge-slow';
-      if (/取消/.test(msg)) return null;
       if (/过大/.test(msg)) return 'file-size';
+      if (/合成|合并/.test(msg)) return 'merge-slow';
+      if (/取消/.test(msg)) return null;
       return 'download-fail';
     }
 
@@ -398,9 +408,8 @@
         progressBar.classList.remove('paused');
       }
 
-      progressPhase.textContent = STEP_LABELS[step] || '下载中…';
-
       if (step === 'queue') {
+        progressPhase.textContent = STEP_LABELS.queue;
         const qp = Math.min(100, Math.max(0, Number(percent) || 0));
         progressPct.textContent = qp + '%';
         progressBar.style.width = qp + '%';
@@ -410,26 +419,32 @@
       }
 
       const pct = Number(percent);
-      const hasBytes = Number(received) > 0;
-      const knownTotal = Number(total) > 0;
+      const recv = Number(received) || 0;
+      const tot = Number(total) || 0;
 
       if (step === 'merge') {
+        const sizeHint = tot || recv;
+        progressPhase.textContent = sizeHint
+          ? '正在合成，约 ' + formatBytes(sizeHint)
+          : STEP_LABELS.merge;
         progressBar.classList.add('indeterminate');
         progressPct.classList.add('hidden');
         return;
       }
 
-      if (knownTotal && pct >= 0) {
-        const displayPct = Math.min(100, Math.max(0, pct));
-        progressPct.textContent = displayPct + '%';
+      progressPhase.textContent = STEP_LABELS[step] || '下载中…';
+
+      if (tot > 0) {
+        const displayPct = Math.min(100, Math.max(0, pct >= 0 ? pct : Math.round((recv / tot) * 100)));
+        progressPct.textContent = formatBytes(recv) + ' / ' + formatBytes(tot);
         progressBar.style.width = displayPct + '%';
         progressBar.classList.remove('indeterminate');
         progressPct.classList.remove('hidden');
         return;
       }
 
-      if (hasBytes) {
-        progressPct.textContent = (Number(received) / 1024 / 1024).toFixed(1) + ' MB';
+      if (recv > 0) {
+        progressPct.textContent = formatBytes(recv);
         progressBar.classList.add('indeterminate');
         progressPct.classList.remove('hidden');
         return;
@@ -618,7 +633,7 @@
         await setupMuxInPage();
         return true;
       } catch {
-        showErrorWithFaq('合并组件加载失败，请刷新页面后重试', 'merge-slow');
+        showErrorWithFaq('请刷新页面后重试', 'merge-slow');
         return false;
       }
     }
@@ -733,7 +748,7 @@
       } else if (fail === 0) {
         showStatus('success', `队列下载完成，共 ${ok} 个分 P`);
       } else {
-        showErrorWithFaq(`队列完成：成功 ${ok}，失败 ${fail}。`, 'queue-download');
+        showErrorWithFaq(`部分完成：成功 ${ok}，失败 ${fail}。可先播放再重试失败项`, 'parts');
       }
 
       queueBtn.disabled = false;

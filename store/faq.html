@@ -10,7 +10,7 @@
     h2 { font-size: 16px; margin-top: 28px; scroll-margin-top: 16px; }
     p, li { font-size: 14px; color: #334155; }
     .muted { color: #64748b; font-size: 13px; }
-    a { color: #2563eb; }
+    a { color: #00a1d6; }
     nav { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin: 20px 0; font-size: 13px; }
     nav a { display: inline-block; margin: 4px 12px 4px 0; }
   </style>
@@ -27,47 +27,52 @@
     <a href="#quality">清晰度</a>
     <a href="#download-fail">下载失败</a>
     <a href="#merge-slow">处理较慢</a>
-    <a href="#queue-download">多集视频</a>
+    <a href="#parts">分 P 与合集</a>
     <a href="#file-size">文件过大</a>
   </nav>
 
   <h2 id="login">需要登录 B 站吗？</h2>
-  <p><strong>扩展不强制登录。</strong>但未登录时，B 站通常只提供较低清晰度。登录后可能获得更高清晰度（视视频与账号而定，大会员可解锁更高）。</p>
-  <p>若可选清晰度较低，可尝试：登录 B 站 → 刷新视频页 → 重新打开下载面板。</p>
+  <p><strong>扩展不强制登录。</strong>未登录时通常只能下较低清晰度；登录后可能更高（视视频与账号而定）。</p>
+  <p>清晰度偏少时：登录 B 站 → 刷新视频页 → 再打开下载面板。</p>
 
   <h2 id="quality">为什么最高只有 720P？</h2>
   <ul>
-    <li>可选清晰度由 B 站与您的账号权限决定</li>
+    <li>可选清晰度由 B 站与您的账号决定</li>
     <li>未登录或非大会员时，高清可能不可用</li>
-    <li>部分视频本身源文件较低清</li>
+    <li>部分视频本身就没有更高清晰度</li>
   </ul>
 
   <h2 id="download-fail">下载失败怎么办？</h2>
+  <p>按顺序试这三步即可：</p>
   <ol>
     <li><strong>先播放视频 5～10 秒</strong>，再点下载</li>
-    <li>尝试切换 <strong>720P</strong> 等较低清晰度</li>
-    <li>确认已登录 B 站（如需高清）</li>
-    <li>刷新页面（F5）后重试</li>
-    <li>在扩展管理页「重新加载」本扩展后再试</li>
-    <li>仍失败请 QQ 联系 <strong>748604487</strong>，附上视频链接与截图</li>
+    <li>改选 <strong>720P</strong> 后重试</li>
+    <li>刷新页面（F5），或在扩展管理页「重新加载」后再试</li>
   </ol>
+  <p>仍失败请 QQ <strong>748604487</strong>，附上视频链接与截图。</p>
 
   <h2 id="merge-slow">进度停在「合并音视频」很久？</h2>
-  <p>高清视频体积较大，需要在您电脑本地完成合成，<strong>属于正常现象</strong>，请耐心等待。文件越大耗时越长。</p>
-  <p>下载前可查看「预计大小」。若提示文件过大，请选择较低清晰度。</p>
+  <p>高清文件较大，需要在您电脑上合成，<strong>属正常现象</strong>，请稍等。体积越大越久。下载前可看「预计大小」。</p>
 
-  <h2 id="queue-download">多集（分 P）视频怎么下载？</h2>
-  <p>仅<strong>多集合集</strong>才会出现「队列下载全部」按钮；普通单集视频只有「开始下载」。</p>
+  <h2 id="parts">分 P 和右侧「合集列表」有什么区别？</h2>
+  <p><strong>不一样，请不要当成同一种。</strong></p>
   <ul>
-    <li><strong>开始下载</strong>：只下当前这一集</li>
-    <li><strong>队列下载全部</strong>：按顺序逐集下载，每集一个 MP4 文件</li>
+    <li><strong>分 P</strong>：同一个视频里的多段（P1、P2、P3…）。面板会出现分 P 按钮，并可「队列下载全部」。</li>
+    <li><strong>合集 / 系列列表</strong>：播放器右侧一串不同视频（点进去会换另一个地址）。这<strong>不是</strong>分 P，目前请打开想下的那一集，再点「开始下载」。</li>
+  </ul>
+  <p>普通单集视频只有「开始下载」，不会出现队列按钮——这是正常的。</p>
+
+  <h2 id="queue-download">分 P 队列怎么用？</h2>
+  <ul>
+    <li><strong>开始下载</strong>：只下当前选中的那一 P</li>
+    <li><strong>队列下载全部</strong>：按 P1 → P2 → … 逐个下载，每 P 一个文件</li>
   </ul>
 
   <h2 id="file-size">提示文件过大？</h2>
-  <p>为保护您的电脑运行稳定，超大文件会提示改用较低清晰度。长视频建议选 720P。</p>
+  <p>超大文件会提示改用较低清晰度，以保护电脑流畅。长视频建议选 720P。</p>
 
   <h2>支持哪些页面？</h2>
-  <p>仅支持 B 站普通视频播放页。番剧、付费专区等特殊页面暂不支持。</p>
+  <p>仅支持 B 站普通视频播放页。番剧、付费专区等暂不支持。</p>
 
   <h2>联系我们</h2>
   <p>QQ：<strong>748604487</strong></p>

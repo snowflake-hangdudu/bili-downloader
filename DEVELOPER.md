@@ -1,6 +1,6 @@
 # B站视频下载助手 — 开发者文档
 
-> **版本：1.2.0** | Manifest V3 | 更新：2026-07-13  
+> **版本：1.0.0** | Manifest V3 | 更新：2026-07-23  
 > **新开会话请先通读本文 + `manifest.json`。** 读完应能改 bug、加功能、打包、更新商店。  
 > **对外页面（`docs/` 隐私/FAQ）勿写实现细节**，只写用户能操作的说明。
 
@@ -75,7 +75,7 @@
 | Edge 上架说明 | 见 `store/EDGE_SUBMIT.md` |
 | GitHub Pages 说明 | 见 `store/GITHUB_PAGES.md` |
 
-**Edge 商店状态（2026-07-13）：** 已提交 v1.0.0，**In review**。Store ID `0RDCKF6C35QD`。通过后 Overview 会有商店 URL。
+**Edge 商店状态（2026-07-23）：** v1.0.0 首次审核未通过（**1.1.3**，主功能无法测试）。Product ID `f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。视觉已定：深色主题 + 图标 3.0。**重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。**
 
 ---
 
@@ -111,6 +111,7 @@ bilibili-downloader/
 ├── scripts/
 │   ├── pack.py                # 打 zip（仅扩展运行文件）
 │   ├── gen_icons.py           # 从 icon-source 生成 icons/*
+│   ├── gen_icon_source.py     # 程序化备用源图（慎用，会覆盖手调源图）
 │   └── gen_store_assets.py    # 生成 store/logo、tile
 ├── test/                      # 本地测试（不打进 zip）
 └── bilibili-downloader.zip    # pack.py 输出，上传 Edge 用
@@ -303,7 +304,7 @@ qn > 64   → fnval=16 DASH → 下视频轨 + 音频轨 → mergeM4sInPage
 
 | 任务 | 位置 |
 |------|------|
-| 改版本 | `manifest.json` → `version` |
+| 改版本 | `manifest.json` → `version`（**商店未上线前保持 1.0.0**；通过后再递增） |
 | 改扩展名/描述 | `_locales/zh_CN`、`en` |
 | 下载/CDN/清晰度 | `page-agent.js` |
 | 悬浮 UI | `content.js` + `content.css` |
@@ -316,7 +317,8 @@ qn > 64   → fnval=16 DASH → 下视频轨 + 音频轨 → mergeM4sInPage
 
 ### 改 UI 主题
 
-CSS 变量在 `content/content.css` 顶部 `--bdl-*`（主色 `#2563eb`，标题栏 `#0f172a`）。
+CSS 变量在 `content/content.css` 顶部 `--bdl-*`（**整体深色**：面板底 `#0f172a` / 卡片 `#1a2332`，主色蓝 `#00A1D6`，粉 `#FB7299` 点缀）。popup 同步。  
+图标：深色蓝环方案第 10 代定稿（`assets/icon-source.png`；过程稿 `assets/icon-iters/`）。换图后递增 `content.js` 的 `ICON_REV` 并重载扩展；商店素材同步 `store/logo-300.png`。
 
 ### 加 popup 功能
 
@@ -358,6 +360,22 @@ python scripts/gen_store_assets.py
 ```
 
 **zip 结构要求：** `manifest.json` 在 zip **根目录**，不要多包一层文件夹。
+
+### 下载包要不要「管理」？
+
+| 要管 | 不要管 |
+|------|--------|
+| `scripts/pack.py` 的 `INCLUDE`：新增运行文件必须加进列表，否则商店包缺文件 | **不要**把 `bilibili-downloader.zip` 提交 Git（已在 `.gitignore`） |
+| **上传商店前**本地重新 `pack.py`，确认 zip 日期/体积合理 | 不必为每次本地调试建版本目录；开发者模式直接加载解压目录 |
+| 审核中：**version 保持 1.0.0**，改功能后若需重传审核包再打一次同版本 zip（以 Partner Center 当时规则为准） | 不必把 `docs/`、`store/`、`DEVELOPER.md`、`test/` 打进扩展 zip |
+| 上线后发更新：先升 `manifest.json` version，再 `pack.py`，再上传 | 不必长期保留一堆旧 zip；需要可本地另存 `releases/bilibili-downloader-1.0.0.zip`（可选，不入库） |
+
+**本机检查清单（上传前）：**
+
+1. `manifest.json` → `version` 符合当前策略（未上线 = `1.0.0`）  
+2. `python scripts/pack.py`  
+3. 解压 zip 看一眼：根目录有 `manifest.json`，有 `content/`、`popup/`、`lib/`、`icons/`、`_locales/`  
+4. Partner Center 上传该 zip  
 
 **Edge 更新已上架扩展：** Partner Center → Update → 上传新 zip（version 必须递增）→ 重新提交审核。
 
@@ -406,12 +424,7 @@ python scripts/gen_store_assets.py
 
 | 版本 | 说明 |
 |------|------|
-| v1.2.0 | 分 P 队列下载；下载预估体积；登录/清晰度提示；FAQ 页 + 失败场景引导链接 |
-| v1.0.1 | DASH 音视频并行下载；CDN 并行探测 + 会话镜像缓存；合并库链式预加载；下载失败友好引导；高清合并结果以 Blob 传递 |
-| v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux 合并 |
-| v1.0.0+（内部迭代） | 进度条、暂停/继续/取消、低清 CDN 修复、加载骨架屏、popup 非视频页引导；**无**下载历史、**无**番剧页、**无** Tab 详情页 |
-| v2.x（内部迭代） | MAIN world + CDN 镜像 + 去 FFmpeg |
-| v1.x（已废弃） | 后台 WBI fetch → 403 |
+| v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux；含进度条/暂停取消、分 P 队列、预估体积、登录提示、FAQ、进度 MB、失败短指引、并行下载与 CDN 探测等。2026-07-22 Edge 首审未过（1.1.3 测不通），完善 `EDGE_SUBMIT.md` 后重提；未上线前不递增 version |
 
 ---
 
@@ -435,18 +448,19 @@ python scripts/gen_store_assets.py
 
 ## 18. 后续优化清单（未实现，仅文档）
 
-> v1.2 已实现：分 P 队列、下载预估、登录提示、FAQ。合集批量 **不做**（见 §0）。  
-> 改代码前先确认；能本地完成的验证/发布步骤交给开发者本人。
+> v1.0.0 已实现：分 P 队列、下载预估、登录提示、FAQ、进度 MB、失败短指引。合集批量 **不做**（见 §0）。  
+> Edge 首审未过（1.1.3）；重提见 `store/EDGE_SUBMIT.md`。**未上线前 version 保持 1.0.0**；通过后再递增发更新包。
 
 ### 内容 / 体验（优先考虑）
 
 | 优先级 | 项 | 说明 |
 |--------|-----|------|
-| 中 | FAQ 写清「分 P ≠ 合集」 | 避免用户把右侧合集列表当成分 P；不写 API 名 |
-| 中 | 进度细化 | 合并阶段显示 MB；下载阶段「已下/总量」；可选 ETA |
+| ✅ | FAQ「分 P ≠ 合集」 | `docs/faq.html` `#parts`（仍属 v1.0.0） |
+| ✅ | 进度细化 | 下载「已下/总量」MB；合并「正在合成，约 XX MB」 |
+| ✅ | 失败文案收紧 | 「先播放 / 换 720P / 刷新」短指引 |
 | 中 | SPA 路由监听 | `pushState`/`popstate` 替代 1s 轮询，切视频更快刷新面板 |
-| 低 | popup 文案 | 非视频页 / 多 P 提示再短一点，减少和面板重复 |
-| 低 | 商店更新说明模板 | 每次发版 3 条用户能看懂的变化（本地填 Partner Center） |
+| 低 | popup 文案 | 非视频页提示再短一点 |
+| 低 | 商店更新说明模板 | 每次发版 3 条用户能看懂的变化 |
 
 ### 工程 / 体验（可选）
 
@@ -464,4 +478,4 @@ python scripts/gen_store_assets.py
 
 ---
 
-*文档与代码同步至 v1.2.0（2026-07-13）。改架构或产品决策请更新本文对应章节。*
+*文档与代码同步至 v1.0.0（2026-07-23，深色主题 + 图标 3.0，Edge 待重提）。改架构或产品决策请更新本文对应章节。*

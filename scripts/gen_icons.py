@@ -1,65 +1,69 @@
-"""从源图生成扩展图标（工具栏小尺寸优先裁切放大）"""
+"""生成各尺寸；16px 粉底白符极简。"""
 import os
-from PIL import Image
+import sys
+
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, 'icons')
 SOURCE = os.path.join(ROOT, 'assets', 'icon-source.png')
 
-# 工具栏主要用 16 / 32，尽量铺满画布
-SIZES = {
-    'icon128.png': 1.0,
-    'icon48.png': 1.0,
-    'icon32.png': 1.0,
-    'icon16.png': 1.0,
-}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gen_icon_source import render_icon  # noqa: E402
+
+SIZES = (16, 32, 48, 128)
+PINK = (251, 114, 153)
+PINK_DEEP = (232, 90, 133)
+WHITE = (255, 255, 255, 255)
 
 
-def crop_to_content(img, margin_ratio=0.04):
-    alpha = img.split()[3]
-    bbox = alpha.getbbox()
-    if not bbox:
-        return img
-    w, h = img.size
-    x0, y0, x1, y1 = bbox
-    bw, bh = x1 - x0, y1 - y0
-    m = int(max(bw, bh) * margin_ratio)
-    x0 = max(0, x0 - m)
-    y0 = max(0, y0 - m)
-    x1 = min(w, x1 + m)
-    y1 = min(h, y1 + m)
-    cropped = img.crop((x0, y0, x1, y1))
-    side = max(cropped.size)
-    canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
-    ox = (side - cropped.width) // 2
-    oy = (side - cropped.height) // 2
-    canvas.paste(cropped, (ox, oy), cropped)
-    return canvas
+def rounded_mask(size, ratio=0.22):
+    m = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(m).rounded_rectangle(
+        [0, 0, size - 1, size - 1], radius=max(1, int(size * ratio)), fill=255
+    )
+    return m
 
 
-def make_icon(src, size):
-    inner = size
-    resized = src.resize((inner, inner), Image.Resampling.LANCZOS)
-    if size <= 32:
-        # 小尺寸锐化：先放大再缩回，边缘更清晰
-        big = src.resize((size * 4, size * 4), Image.Resampling.LANCZOS)
-        resized = big.resize((size, size), Image.Resampling.LANCZOS)
-    return resized
+def make_simple_16():
+    size = 64
+    img = Image.new('RGBA', (size, size), (*PINK, 255))
+    d = ImageDraw.Draw(img)
+    img.putalpha(rounded_mask(size, 0.22))
+    # 天线
+    d.ellipse([18, 2, 28, 12], fill=WHITE)
+    d.ellipse([36, 2, 46, 12], fill=WHITE)
+    d.rectangle([21, 10, 25, 18], fill=WHITE)
+    d.rectangle([39, 10, 43, 18], fill=WHITE)
+    # TV 框
+    d.rounded_rectangle([10, 14, 54, 38], radius=6, fill=WHITE)
+    d.rounded_rectangle([15, 18, 49, 34], radius=4, fill=(*PINK_DEEP, 255))
+    d.polygon([(24, 20), (24, 32), (42, 26)], fill=WHITE)
+    # 下载
+    cx = 32
+    d.polygon([(cx, 54), (cx - 12, 40), (cx + 12, 40)], fill=WHITE)
+    d.rounded_rectangle([cx - 5, 34, cx + 5, 42], radius=4, fill=WHITE)
+    d.rounded_rectangle([cx - 14, 54, cx + 14, 58], radius=2, fill=WHITE)
+    return img.resize((16, 16), Image.Resampling.LANCZOS)
 
 
 def main():
-    if not os.path.isfile(SOURCE):
-        raise SystemExit('缺少源图: ' + SOURCE)
-
-    raw = Image.open(SOURCE).convert('RGBA')
-    src = crop_to_content(raw, margin_ratio=0.02)
     os.makedirs(OUT_DIR, exist_ok=True)
-
-    for name, _ratio in SIZES.items():
-        size = int(name.replace('icon', '').replace('.png', ''))
-        out = os.path.join(OUT_DIR, name)
-        make_icon(src, size).save(out, 'PNG', optimize=True)
-        print('OK', out, size)
+    src = render_icon(1024)
+    src.save(SOURCE, 'PNG', optimize=True)
+    print('OK', SOURCE)
+    for size in SIZES:
+        path = os.path.join(OUT_DIR, f'icon{size}.png')
+        if size == 16:
+            img = make_simple_16()
+        elif size <= 32:
+            big = render_icon(size * 4, radius_ratio=0.2)
+            big = big.filter(ImageFilter.UnsharpMask(radius=1.1, percent=140, threshold=2))
+            img = big.resize((size, size), Image.Resampling.LANCZOS)
+        else:
+            img = render_icon(size)
+        img.save(path, 'PNG', optimize=True)
+        print('OK', path, size)
 
 
 if __name__ == '__main__':

@@ -328,7 +328,7 @@
           return {
             sizeBytes: Math.round(bytes),
             sizeLabel: formatSize(bytes),
-            estimateNote: '按码率估算，合并后体积可能略有出入'
+            estimateNote: '约数，仅供参考'
           };
         }
       }
@@ -572,18 +572,20 @@
   function formatDownloadError(err) {
     const msg = err?.message || String(err);
     if (msg === '下载已取消') return msg;
-    if (/合并库|合并模块|mp4-remux|BiliM4sMux/.test(msg)) {
-      return '合并组件未就绪，请刷新页面后重试';
+    if (/合并库|合并模块|mp4-remux|BiliM4sMux|合并组件/.test(msg)) {
+      return '请刷新页面后重试';
     }
     if (/无视频流|请先点击播放|请先播放/.test(msg)) {
-      return '未检测到视频流，请先点击播放视频 5～10 秒后再下载';
+      return '请先播放视频 5～10 秒，再点下载';
     }
-    if (/文件过大/.test(msg)) return msg;
-    if (/403|CDN|镜像|探测|HTTP 4/.test(msg)) {
-      return '下载失败：CDN 不可用。请先播放视频 5～10 秒，或切换 720P 后重试；高清可能需要登录 B 站账号';
+    if (/文件过大/.test(msg)) {
+      return '文件过大，请改选较低清晰度';
     }
-    if (/所有 CDN/.test(msg)) {
-      return '所有 CDN 镜像均不可用，请先播放视频 5～10 秒后再试，或切换 720P 清晰度';
+    if (/403|CDN|镜像|探测|HTTP 4|所有 CDN|无有效 CDN/.test(msg)) {
+      return '下载失败。请先播放 5～10 秒，或改选 720P 后重试';
+    }
+    if (/超时/.test(msg)) {
+      return '请求超时，请刷新页面后重试';
     }
     return msg;
   }
@@ -839,7 +841,8 @@
     }
 
     if (aBlob) {
-      sendProgress('merge');
+      const mergeBytes = vBlob.size + aBlob.size;
+      sendProgress('merge', 0, { received: mergeBytes, total: mergeBytes });
       const mp4Blob = await mergeM4sInPage(vBlob, aBlob);
       sendProgress('save', 100);
       return {

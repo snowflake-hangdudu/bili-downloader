@@ -1,4 +1,4 @@
-"""生成 Edge 商店素材：logo 300x300、推广图 440x280"""
+"""商店素材：粉底图标 + 深色推广条"""
 import os
 from PIL import Image, ImageDraw
 
@@ -7,19 +7,12 @@ STORE = os.path.join(ROOT, 'store')
 SOURCE = os.path.join(ROOT, 'assets', 'icon-source.png')
 
 BG = (15, 23, 42)
-ACCENT = (37, 99, 235)
+PINK = (251, 114, 153)
 
 
 def load_icon(size):
     src = Image.open(SOURCE).convert('RGBA')
-    alpha = src.split()[3]
-    bbox = alpha.getbbox()
-    if bbox:
-        src = src.crop(bbox)
-    side = max(src.size)
-    canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
-    canvas.paste(src, ((side - src.width) // 2, (side - src.height) // 2), src)
-    return canvas.resize((size, size), Image.Resampling.LANCZOS)
+    return src.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def make_logo():
@@ -34,20 +27,17 @@ def make_tile():
     draw = ImageDraw.Draw(img)
     for y in range(h):
         t = y / h
-        r = int(BG[0] + (ACCENT[0] - BG[0]) * t * 0.35)
-        g = int(BG[1] + (ACCENT[1] - BG[1]) * t * 0.35)
-        b = int(BG[2] + (ACCENT[2] - BG[2]) * t * 0.35)
+        r = int(BG[0] + (PINK[0] - BG[0]) * t * 0.35)
+        g = int(BG[1] + (PINK[1] - BG[1]) * t * 0.2)
+        b = int(BG[2] + (PINK[2] - BG[2]) * t * 0.25)
         draw.line([(0, y), (w, y)], fill=(r, g, b))
-
     icon = load_icon(140)
     img.paste(icon, (36, (h - 140) // 2), icon)
-
-    # 简单文字区域（无中文字体时用英文，商店页以表单中文为准）
-    draw.rounded_rectangle([210, 88, 410, 192], radius=16, fill=(30, 41, 59))
-    draw.text((228, 108), 'Bili Video', fill=(255, 255, 255))
-    draw.text((228, 132), 'Download MP4', fill=(148, 163, 184))
-    draw.text((228, 158), 'v1.0.0', fill=(96, 165, 250))
-
+    draw.rounded_rectangle([210, 88, 410, 192], radius=18, fill=(30, 41, 59))
+    draw.text((228, 108), 'Bili Downloader', fill=(255, 255, 255))
+    draw.text((228, 132), 'Video · MP4 · Free', fill=(148, 163, 184))
+    draw.rounded_rectangle([228, 158, 300, 178], radius=8, fill=PINK)
+    draw.text((238, 160), 'v1.0.0', fill=(255, 255, 255))
     out = os.path.join(STORE, 'tile-440x280.png')
     img.save(out, 'PNG')
     print('OK', out)
@@ -55,8 +45,6 @@ def make_tile():
 
 def main():
     os.makedirs(STORE, exist_ok=True)
-    if not os.path.isfile(SOURCE):
-        raise SystemExit('缺少 assets/icon-source.png')
     make_logo()
     make_tile()
 
