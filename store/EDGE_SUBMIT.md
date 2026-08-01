@@ -12,23 +12,27 @@
    https://www.bilibili.com/video/BV1GJ411x7h7 → F5
    右下角按钮 → 720P → 下载成功
    （可选）再下一个并行任务，确认两张进度卡可单独取消
+   （可选）多 P 视频：队列下载 →「取消整队」
+   （可选）非视频页点扩展图标：应看到「仅支持 /video」提示
 
 2. 打包（项目根目录）
    python scripts/pack.py
    → bilibili-downloader.zip
    （确认 zip 根目录有 manifest.json，version = 1.0.2）
 
-3. Partner Center → Update
+3. Partner Center → Update（发版收尾清单）
    https://partner.microsoft.com/dashboard → 该扩展
-   · 上传 bilibili-downloader.zip
-   · Markets：优先仅「中国」
-   · Store listings：
-       - 中文/英文 Description：可用本文第五步（可微调）
-       - Search terms：粘贴本文「Search terms」（中英文各填）
-       - 更新说明 / What's new：粘贴本文「1.0.2 更新说明」
-       - 若 1.0.1 已 Live 且尚未填过 1.0.1 说明，可先贴 1.0.1 再贴 1.0.2（或只贴 1.0.2）
-   · Notes for Certification：粘贴本文第七步英文全文
-   · Submit
+   □ 上传 bilibili-downloader.zip
+   □ Markets：仅「中国」（不要 Worldwide）
+   □ Store listings 中文：
+       - Description：粘贴本文第五步中文
+       - Search terms：B站下载, bilibili下载, 哔哩哔哩, 视频下载, MP4, M4A, BV下载, 分P下载
+       - 更新说明 / What's new：粘贴「1.0.2 更新说明」中文
+   □ Store listings English（若已添加）：
+       - Description / Search terms / What's new：见第五步英文
+   □ 商店图片：logo / tile / 至少 1 张 1280×800 截图（见第六步）
+   □ Notes for Certification：粘贴第七步英文全文（勿留空）
+   □ Submit
 ```
 
 审核备注与拒审说明见下文第七步、文末「若被拒 / 重提清单」。
@@ -198,8 +202,9 @@ bilibili, bilibili download, bilibili mp4, download bilibili video, b站, bilibi
 ```
 1.0.2 更新：
 • 支持多任务并行下载（最多 3 路），每个任务独立进度卡，可单独暂停/取消
-• 修复悬浮按钮拖拽；下载历史支持同集 MP4 与 M4A 并列
-• 分 P 队列并行更稳（失败自动重试）；会话缓存与商店检索文案优化
+• 分 P 队列支持「取消整队」；并行与队列互斥提示更清晰
+• 修复悬浮按钮拖拽与窗口缩放后位置；下载历史支持同集 MP4 与 M4A 并列
+• 非视频页 popup 明确「仅 /video」；历史「打开」自动展开下载面板
 ```
 
 英文：
@@ -207,8 +212,9 @@ bilibili, bilibili download, bilibili mp4, download bilibili video, b站, bilibi
 ```
 1.0.2:
 • Parallel downloads (up to 3) with separate progress cards; per-task pause/cancel
-• Fixed draggable FAB; MP4 and M4A history can coexist for the same video
-• Parallel multi-part queue with retry; better store search terms
+• Multi-part queue: cancel entire queue; clearer parallel vs queue tips
+• Fixed FAB drag + clamp on window resize; MP4/M4A history can coexist
+• Non-video popup clarifies /video-only; history Open auto-opens the panel
 ```
 
 #### 1.0.1（若 Live 后尚未填过，可补贴）
@@ -239,13 +245,21 @@ bilibili, bilibili download, bilibili mp4, download bilibili video, b站, bilibi
 |------|------|------|
 | Extension logo | 300×300（最小 128） | `store/logo-300.png` |
 | Small promotional tile | 440×280 | `store/tile-440x280.png` |
-| Screenshots | 1280×800 或 640×480 | **需自行截图**（见下） |
+| Screenshots | 1280×800 或 640×480 | **需自行截图后上传 Partner Center**（见下） |
 
-### 截图建议（至少 1 张，建议 3 张）
+### 截图清单（至少 1 张，建议 3 张；推荐 1280×800）
 
-1. B 站视频页 + 右下角下载面板（含进度条与暂停按钮）— **必须能看清右下角入口**
-2. 浏览器工具栏 popup 显示视频信息
-3. 清晰度选择与「开始下载」按钮
+在本机 Edge 加载扩展后截图，上传到 Store listings → Screenshots：
+
+| # | 画面 | 怎么拍 |
+|---|------|--------|
+| 1（必拍） | 视频页 + 右下角面板展开 | 打开 BV1GJ411x7h7 → 点 FAB → 露出清晰度与「开始下载」；**右下角圆形按钮必须入镜** |
+| 2 | 下载中进度卡 | 开始下载后截独立进度卡（百分比 / 暂停 / 取消）；若有并行可露两张卡 |
+| 3 | 工具栏 popup | 同视频页点扩展图标：封面、标题、清晰度标签、「打开下载面板」 |
+
+可选：非视频页 popup（「仅支持 /video」文案）— 有助于审核员理解适用范围，非必须。
+
+> 截图文件不纳入 git（体积大）；打 zip 时也不需要放进扩展包，只上传 Partner Center。
 
 ---
 
@@ -331,4 +345,4 @@ Resubmission note (2026-07): Previous review failed with 1.1.3 because primary f
 |------|------|
 | 本机公开 BV 能正常下载 | 只改备注 / 市场 / listing 后重提 |
 | 本机也下不了 | 再查 CDN / API（见 `DEVELOPER.md` §13） |
-| 想降低「测错页」概率 | 可选优化非视频页 popup 文案（低优先级） |
+| 想降低「测错页」概率 | 已做：非视频页 popup 明确「仅 /video」+ 示例页入口；仍被拒则优先改备注/市场 |

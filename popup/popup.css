@@ -453,6 +453,13 @@ body {
   margin-bottom: 6px;
 }
 
+.popup-empty-desc {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--bdl-text-muted);
+}
+
 .popup-empty-site {
   font-size: 11px;
   color: var(--bdl-text-muted);
@@ -535,12 +542,6 @@ body {
   border: 1px solid var(--bdl-border);
   border-radius: var(--bdl-radius);
   margin-bottom: 12px;
-}
-
-.popup-empty-desc {
-  font-size: 12px;
-  color: var(--bdl-text-muted);
-  margin-bottom: 6px;
 }
 
 .popup-empty-list {
@@ -737,6 +738,8 @@ body {
   font-size: 10px;
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .popup-history-open:hover {

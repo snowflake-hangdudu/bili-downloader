@@ -96,6 +96,46 @@ function formatBytes(n) {
   return '0 B';
 }
 
+/** 与面板一致：跳转视频页并自动展开下载面板 */
+async function openHistoryEntry(entry) {
+  const url = historyEntryUrl(entry);
+  if (!url) return;
+
+  await chrome.storage.local.set({ biliDlAutoOpen: 1 });
+
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active?.id && isBiliVideoUrl(active.url)) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: active.id },
+        func: () => {
+          try { sessionStorage.setItem('biliDlAutoOpen', '1'); } catch { /* ignore */ }
+        }
+      });
+    } catch { /* ignore */ }
+    await chrome.tabs.update(active.id, { url });
+    window.close();
+    return;
+  }
+
+  if (active?.id && active.url && /bilibili\.com/i.test(active.url)) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: active.id },
+        func: () => {
+          try { sessionStorage.setItem('biliDlAutoOpen', '1'); } catch { /* ignore */ }
+        }
+      });
+    } catch { /* ignore */ }
+    await chrome.tabs.update(active.id, { url });
+    window.close();
+    return;
+  }
+
+  await chrome.tabs.create({ url });
+  window.close();
+}
+
 async function renderPopupHistory() {
   const items = await loadHistory();
   const countEl = $('popup-history-count');
@@ -108,7 +148,7 @@ async function renderPopupHistory() {
     listEl.innerHTML = items.map((h, i) => {
       const url = historyEntryUrl(h);
       const link = url
-        ? `<a class="popup-history-open" href="${url}" data-idx="${i}" target="_blank" rel="noopener">打开</a>`
+        ? `<button type="button" class="popup-history-open" data-idx="${i}">打开</button>`
         : '';
       return `
         <div class="popup-history-item">
@@ -119,6 +159,13 @@ async function renderPopupHistory() {
           ${link}
         </div>`;
     }).join('');
+    listEl.querySelectorAll('.popup-history-open').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.idx);
+        const entry = items[idx];
+        if (entry) await openHistoryEntry(entry);
+      });
+    });
   } else {
     countEl.classList.add('hidden');
     clearEl.classList.add('hidden');

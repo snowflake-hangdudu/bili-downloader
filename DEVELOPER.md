@@ -463,16 +463,19 @@ python scripts/gen_store_assets.py
 | 文件名按码点截断 | `page-agent.js` |
 | 视频信息会话缓存 | 10s TTL，键为 `href#p=`，切分 P / SPA 会失效 |
 | 队列失败自动重试 1 次 | 间隔约 1s，标题显示「重试中…」；整队失败短提示 |
+| 分 P「取消整队」 | `queueCancelled` + 取消进行中 job；按钮 `#bili-dl-queue-cancel` |
 | 并行下载 | 单集最多 3 路并行；分 P 队列同限 3 路；page-agent 每任务独立 session |
 | 独立进度卡 | 每任务单独暂停/取消，互不影响 |
+| 并行 / 队列提示 | 面板 `bili-dl-parallel-tip`；互斥时短文案 |
+| FAB 缩放夹回 | `resize` 后 `clampFabPos` 并写回 `biliDlFabPos` |
+| popup 非视频页文案 | 明确仅 `/video`；示例 BV 入口 |
+| popup 历史打开 | `biliDlAutoOpen` storage + sessionStorage，与面板一致自动展开 |
 | 商店更新说明 + Search Terms | `store/EDGE_SUBMIT.md` 第五步 / 「更新说明」；发 1.0.2 |
 
 ### 未实现（可选）
 
 | 优先级 | 项 | 说明 | 涉及文件 |
 |--------|-----|------|----------|
-| 低 | popup 文案 | 非视频页提示再短一点 | `popup/*` |
-| 低 | 历史入口进 popup | 非视频页也能看历史 | `popup.js`, `popup.html` |
 | 低 | 键盘快捷键 | 如 `Alt+D` 打开面板（`commands`） | `manifest.json`, `content.js` |
 | 低 | ICON_REV 自动化 | 读文件 hash 生成，免手动递增 | `scripts/`, `content.js` |
 | 低 | 工具函数抽取 | `formatView`/`formatTime` → `lib/format.js` | `lib/`, `content.js`, `popup.js` |
@@ -484,4 +487,4 @@ python scripts/gen_store_assets.py
 
 ---
 
-*文档与代码同步至 v1.0.2（并行进度卡、发版清单）。改架构或产品决策请更新本文对应章节。*
+*文档与代码同步至 v1.0.2（整队取消、popup/FAB 体验、发版清单）。改架构或产品决策请更新本文对应章节。*

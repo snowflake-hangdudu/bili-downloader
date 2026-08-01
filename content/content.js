@@ -295,6 +295,8 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
               <span id="bili-dl-queue-label">队列下载全部分 P</span>
             </button>
+            <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
+            <div id="bili-dl-parallel-tip" class="bili-dl-info-tip bili-dl-parallel-tip">最多同时 3 路并行；并行进行中请先完成，再使用分 P 队列</div>
             <div id="bili-dl-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
           </div>
@@ -343,7 +345,9 @@
     const loginHintEl = panel.querySelector('#bili-dl-login-hint');
     const startBtn = panel.querySelector('#bili-dl-start');
     const queueBtn = panel.querySelector('#bili-dl-queue-all');
+    const queueCancelBtn = panel.querySelector('#bili-dl-queue-cancel');
     const queueLabelEl = panel.querySelector('#bili-dl-queue-label');
+    const parallelTipEl = panel.querySelector('#bili-dl-parallel-tip');
     const jobListEl = panel.querySelector('#bili-dl-job-list');
     const statusEl = panel.querySelector('#bili-dl-status');
     const btnDefaultHtml = startBtn.innerHTML;
@@ -515,6 +519,28 @@
     function syncJobListVisibility() {
       downloading = activeJobs.size > 0 || queueRunning;
       jobListEl.classList.toggle('hidden', activeJobs.size === 0);
+      queueCancelBtn.classList.toggle('hidden', !queueRunning);
+      if (parallelTipEl) {
+        const busy = activeJobs.size > 0 || queueRunning;
+        parallelTipEl.classList.toggle('is-busy', busy);
+        if (queueRunning) {
+          parallelTipEl.textContent = '分 P 队列进行中（最多 3 路）；可点「取消整队」停止后续任务';
+        } else if (activeJobs.size > 0) {
+          parallelTipEl.textContent = `并行下载中 ${activeJobs.size}/${PARALLEL_MAX}；请先完成后再使用分 P 队列`;
+        } else {
+          parallelTipEl.textContent = '最多同时 3 路并行；并行进行中请先完成，再使用分 P 队列';
+        }
+      }
+    }
+
+    function cancelEntireQueue() {
+      if (!queueRunning) return;
+      queueCancelled = true;
+      activeJobs.forEach((job) => {
+        agentSignal('CANCEL_DOWNLOAD', { jobId: job.jobId });
+      });
+      queueCancelBtn.disabled = true;
+      queueCancelBtn.textContent = '正在取消…';
     }
 
     function hideProgress() {
@@ -1026,6 +1052,8 @@
       startBtn.disabled = true;
       queueBtn.disabled = true;
       queueLabelEl.textContent = '并行下载分 P…';
+      queueCancelBtn.disabled = false;
+      queueCancelBtn.textContent = '取消整队';
       statusEl.classList.add('hidden');
       syncJobListVisibility();
 
@@ -1119,6 +1147,8 @@
       await Promise.all(Array.from({ length: workers }, () => worker()));
 
       queueRunning = false;
+      queueCancelBtn.disabled = false;
+      queueCancelBtn.textContent = '取消整队';
       syncJobListVisibility();
 
       if (queueCancelled) {
@@ -1141,6 +1171,7 @@
       startBtn.innerHTML = btnDefaultHtml;
       startBtn.disabled = !selectedQn || !videoInfo;
       queueBtn.disabled = false;
+      refreshStartBtnForParallel();
     }
 
     toggleBtn.onclick = async () => {
@@ -1152,6 +1183,7 @@
     closeBtn.onclick = () => { isOpen = false; menu.classList.add('hidden'); };
     startBtn.onclick = startDownload;
     queueBtn.onclick = startQueueDownload;
+    queueCancelBtn.onclick = cancelEntireQueue;
 
     formatPillsEl.querySelectorAll('.bili-dl-pill[data-format]').forEach((btn) => {
       btn.onclick = () => setFormat(btn.dataset.format);
@@ -1257,12 +1289,24 @@
 
     toggleBtn.addEventListener('dragstart', (e) => e.preventDefault());
 
-    // 恢复上次拖拽位置
+    // 恢复上次拖拽位置；窗口缩放时夹回可视区
     chrome.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
       if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
         applyFabPos(pos.left, pos.top);
       }
     }).catch(() => {});
+
+    let fabResizeTimer = 0;
+    window.addEventListener('resize', () => {
+      clearTimeout(fabResizeTimer);
+      fabResizeTimer = setTimeout(() => {
+        const left = parseFloat(fabPanel.style.left);
+        const top = parseFloat(fabPanel.style.top);
+        if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+        const p = applyFabPos(left, top);
+        chrome.storage.local.set({ biliDlFabPos: p }).catch(() => {});
+      }, 100);
+    });
 
     panel.querySelector('.bili-dl-feedback')?.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1314,16 +1358,27 @@
     // 兜底：站内其他改 URL 方式（location 直接赋值等）
     window.addEventListener('hashchange', onUrlChanged);
 
+    function autoOpenPanelSoon() {
+      setTimeout(() => {
+        isOpen = true;
+        menu.classList.remove('hidden');
+        loadVideoInfo();
+      }, 600);
+    }
+
     try {
       if (sessionStorage.getItem('biliDlAutoOpen')) {
         sessionStorage.removeItem('biliDlAutoOpen');
-        setTimeout(() => {
-          isOpen = true;
-          menu.classList.remove('hidden');
-          loadVideoInfo();
-        }, 600);
+        autoOpenPanelSoon();
       }
     } catch { /* ignore */ }
+
+    // popup 历史「打开」等跨标签场景用 storage 标记
+    chrome.storage.local.get('biliDlAutoOpen').then(({ biliDlAutoOpen: flag }) => {
+      if (!flag) return;
+      chrome.storage.local.remove('biliDlAutoOpen').catch(() => {});
+      autoOpenPanelSoon();
+    }).catch(() => {});
   }
 
   function waitAndMount() {

@@ -539,6 +539,21 @@
   display: none;
 }
 
+.bili-dl-parallel-tip {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--bdl-text-muted);
+}
+
+.bili-dl-parallel-tip.is-busy {
+  color: var(--bdl-text);
+}
+
+#bili-dl-queue-cancel {
+  margin-top: 8px;
+}
+
 .bili-dl-job-list {
   margin-top: 12px;
   display: flex;

@@ -74,7 +74,8 @@
         </div>
 
         <div class="popup-meta-row">
-          <span class="popup-meta-tag">格式 MP4</span>
+          <span class="popup-meta-tag">MP4 / M4A</span>
+          <span class="popup-meta-tag">最多 3 路并行</span>
           <span id="max-quality" class="popup-meta-tip">源最高 —</span>
         </div>
 
@@ -82,7 +83,8 @@
 
         <ul class="popup-tips compact">
           <li>实际下载在页面右下角悬浮面板操作</li>
-          <li>多 P 视频可在面板「队列下载全部」</li>
+          <li>支持 MP4 视频与 M4A 音频；最多同时 3 路并行</li>
+          <li>多 P 可「队列下载」；并行进行中请先完成再开队列</li>
           <li>下载失败？<a id="popup-faq-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">查看常见问题</a></li>
         </ul>
 
@@ -95,7 +97,7 @@
       <div id="state-empty" class="hidden">
         <div class="popup-detect warn">
           <span class="popup-dot warn"></span>
-          <span>未识别到 B 站视频页</span>
+          <span>当前不是视频播放页</span>
         </div>
 
         <div class="popup-empty-hero">
@@ -105,14 +107,15 @@
               <path d="M10 9l5 3-5 3V9z"/>
             </svg>
           </div>
-          <p class="popup-empty-title">请在 B 站视频页使用</p>
+          <p class="popup-empty-title">仅支持 /video 播放页</p>
+          <p class="popup-empty-desc">请打开 bilibili.com/video/BV… 或 /video/av…。首页、搜索、番剧页没有下载入口。</p>
           <p id="empty-current-site" class="popup-empty-site">当前页面：—</p>
         </div>
 
         <div class="popup-steps">
           <div class="popup-step">
             <span class="popup-step-num">1</span>
-            <span class="popup-step-text">打开 B 站视频播放页</span>
+            <span class="popup-step-text">打开普通视频页（含 BV / av）</span>
           </div>
           <div class="popup-step">
             <span class="popup-step-num">2</span>
@@ -120,19 +123,19 @@
           </div>
           <div class="popup-step">
             <span class="popup-step-num">3</span>
-            <span class="popup-step-text">选择清晰度，一键下载 MP4</span>
+            <span class="popup-step-text">选清晰度，下载 MP4 或 M4A</span>
           </div>
         </div>
 
         <div class="popup-feature-tags">
-          <span class="popup-feature-tag">格式 MP4</span>
+          <span class="popup-feature-tag">MP4 / M4A</span>
+          <span class="popup-feature-tag">最多 3 路并行</span>
           <span class="popup-feature-tag">完全免费</span>
-          <span class="popup-feature-tag">个人学习</span>
         </div>
 
-        <a id="btn-go-bili" class="popup-btn" href="https://www.bilibili.com" target="_blank" rel="noopener">
+        <a id="btn-go-bili" class="popup-btn" href="https://www.bilibili.com/video/BV1GJ411x7h7" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
-          前往 B 站
+          打开示例视频页
         </a>
       </div>
 
