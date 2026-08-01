@@ -1,23 +1,20 @@
 #bili-dl-panel {
-  /* 整体深色主题：近黑面板 + B 站蓝主色 / 粉点缀 */
-  --bdl-primary: #00a1d6;
-  --bdl-primary-hover: #33b8e0;
-  --bdl-primary-soft: rgba(0, 161, 214, 0.18);
-  --bdl-primary-ring: rgba(0, 161, 214, 0.35);
-  --bdl-accent: #fb7299;
-  --bdl-surface: #1a2332;
-  --bdl-bg: #0f172a;
-  --bdl-text: #e2e8f0;
-  --bdl-text-muted: #94a3b8;
-  --bdl-border: #334155;
-  --bdl-header-from: #0a0f18;
-  --bdl-header-to: #111827;
-  --bdl-header-text: #ffffff;
-  --bdl-success-bg: rgba(16, 185, 129, 0.14);
-  --bdl-success-text: #34d399;
-  --bdl-error-bg: rgba(239, 68, 68, 0.14);
-  --bdl-error-text: #f87171;
-  --bdl-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  /* 扁平极简主题：浅色/深色跟随系统，单一蓝色强调 */
+  --bdl-accent: #000000;
+  --bdl-accent-contrast: #ffffff;
+  --bdl-accent-soft: rgba(0, 0, 0, 0.06);
+  --bdl-surface: #f5f5f5;
+  --bdl-bg: #ffffff;
+  --bdl-text: #111111;
+  --bdl-text-muted: #7a7a7a;
+  --bdl-border: #e3e3e3;
+  --bdl-header-text: #111111;
+  --bdl-success-bg: #f5f5f5;
+  --bdl-success-text: #111111;
+  --bdl-error-bg: #f5f5f5;
+  --bdl-error-text: #111111;
+  --bdl-radius: 6px;
+  --bdl-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
 
   position: fixed;
   right: 24px;
@@ -29,6 +26,25 @@
   color: var(--bdl-text);
 }
 
+@media (prefers-color-scheme: dark) {
+  #bili-dl-panel {
+    --bdl-accent: #ffffff;
+    --bdl-accent-contrast: #000000;
+    --bdl-accent-soft: rgba(255, 255, 255, 0.10);
+    --bdl-surface: #1b1b1b;
+    --bdl-bg: #101010;
+    --bdl-text: #e6e6e6;
+    --bdl-text-muted: #9a9a9a;
+    --bdl-border: #2b2b2b;
+    --bdl-header-text: #e6e6e6;
+    --bdl-success-bg: #1b1b1b;
+    --bdl-success-text: #e6e6e6;
+    --bdl-error-bg: #1b1b1b;
+    --bdl-error-text: #e6e6e6;
+    --bdl-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  }
+}
+
 /* 面板内通用 hidden（队列按钮等依赖此类） */
 #bili-dl-panel-root .hidden {
   display: none !important;
@@ -38,29 +54,28 @@
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  background: linear-gradient(145deg, var(--bdl-header-from), var(--bdl-header-to));
+  border: 1px solid var(--bdl-border);
+  background: var(--bdl-bg);
   cursor: pointer;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.32);
+  box-shadow: var(--bdl-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 5px;
   overflow: hidden;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: background 0.2s, transform 0.15s;
 }
 
 #bili-dl-toggle img {
   width: 100%;
   height: 100%;
-  border-radius: 13px;
+  border-radius: 12px;
   display: block;
   object-fit: cover;
 }
 
 #bili-dl-toggle:hover {
-  transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.40);
+  transform: scale(1.04);
 }
 
 #bili-dl-menu {
@@ -69,9 +84,9 @@
   right: 0;
   width: 400px;
   max-width: calc(100vw - 32px);
-  background: var(--bdl-surface);
+  background: var(--bdl-bg);
   border: 1px solid var(--bdl-border);
-  border-radius: 18px;
+  border-radius: var(--bdl-radius);
   box-shadow: var(--bdl-shadow);
   overflow: hidden;
   animation: bili-dl-slide-up 0.25s ease;
@@ -90,21 +105,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, var(--bdl-header-from), var(--bdl-header-to));
+  padding: 12px 16px;
+  background: var(--bdl-bg);
   color: var(--bdl-header-text);
-  position: relative;
-}
-
-.bili-dl-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--bdl-primary), var(--bdl-accent) 70%, transparent);
-  opacity: 0.95;
+  border-bottom: 1px solid var(--bdl-border);
 }
 
 .bili-dl-header-left {
@@ -115,7 +119,6 @@
 }
 
 .bili-dl-header-icon {
-  border-radius: 6px;
   flex-shrink: 0;
 }
 
@@ -129,26 +132,27 @@
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--bdl-surface);
+  color: var(--bdl-text-muted);
   flex-shrink: 0;
 }
 
 #bili-dl-close {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: #fff;
-  font-size: 20px;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  background: var(--bdl-surface);
+  border: 1px solid var(--bdl-border);
+  color: var(--bdl-text-muted);
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--bdl-radius);
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
 }
 
 #bili-dl-close:hover {
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--bdl-text);
+  border-color: var(--bdl-text-muted);
 }
 
 .bili-dl-body {
@@ -164,7 +168,7 @@
   padding: 10px 12px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   margin-bottom: 12px;
   font-size: 12px;
   color: var(--bdl-text);
@@ -174,9 +178,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--bdl-accent);
   flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
 }
 
 .bili-dl-tag {
@@ -191,8 +194,8 @@
   margin-left: auto;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--bdl-primary-soft);
-  color: var(--bdl-primary);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
   font-size: 11px;
   font-weight: 600;
 }
@@ -207,7 +210,7 @@
   padding: 10px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   margin-bottom: 12px;
 }
 
@@ -215,10 +218,10 @@
   position: relative;
   width: 96px;
   height: 60px;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--bdl-header-from);
+  background: var(--bdl-border);
 }
 
 .bili-dl-cover {
@@ -238,8 +241,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
-  background: linear-gradient(135deg, #1e293b, #334155);
+  color: var(--bdl-text-muted);
+  background: var(--bdl-border);
 }
 
 .bili-dl-cover-ph.hidden {
@@ -247,20 +250,13 @@
 }
 
 .bili-dl-shimmer {
-  background: linear-gradient(90deg, #1e293b 0%, #334155 45%, #1e293b 90%);
-  background-size: 200% 100%;
-  animation: bili-dl-shimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes bili-dl-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  background: var(--bdl-border);
 }
 
 .bili-dl-sk-cover {
   position: absolute;
   inset: 0;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .bili-dl-sk-cover.hidden {
@@ -281,7 +277,8 @@
 .bili-dl-sk-line {
   display: block;
   height: 12px;
-  border-radius: 6px;
+  border-radius: 3px;
+  background: var(--bdl-border);
 }
 
 .bili-dl-sk-line.short {
@@ -322,7 +319,7 @@
 .bili-dl-video-author {
   margin-top: 5px;
   font-size: 12px;
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -361,7 +358,7 @@
 .bili-dl-page-btn {
   padding: 4px 10px;
   border: 1px solid var(--bdl-border);
-  border-radius: 10px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-surface);
   color: var(--bdl-text-muted);
   font-size: 11px;
@@ -371,9 +368,9 @@
 
 .bili-dl-page-btn:hover,
 .bili-dl-page-btn.active {
-  border-color: var(--bdl-primary);
-  color: var(--bdl-primary);
-  background: var(--bdl-primary-soft);
+  border-color: var(--bdl-accent);
+  color: var(--bdl-accent);
+  background: var(--bdl-accent-soft);
 }
 
 .bili-dl-section {
@@ -403,7 +400,7 @@
 .bili-dl-pill {
   padding: 7px 14px;
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-surface);
   color: var(--bdl-text-muted);
   font-size: 12px;
@@ -414,16 +411,15 @@
 }
 
 .bili-dl-pill.active {
-  border-color: var(--bdl-primary);
-  background: var(--bdl-primary);
-  color: #fff;
-  box-shadow: 0 4px 12px var(--bdl-primary-ring);
+  border-color: var(--bdl-accent);
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
 }
 
 .bili-dl-pill.loading,
 .bili-dl-pill.disabled {
   cursor: default;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .bili-dl-info-row {
@@ -440,7 +436,7 @@
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
   color: var(--bdl-text);
@@ -460,9 +456,9 @@
   width: 100%;
   padding: 12px 16px;
   border: none;
-  border-radius: 14px;
-  background: linear-gradient(145deg, var(--bdl-primary), var(--bdl-primary-hover));
-  color: #fff;
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -470,33 +466,27 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-  box-shadow: 0 6px 18px var(--bdl-primary-ring);
+  transition: background 0.2s, opacity 0.2s;
 }
 
 .bili-dl-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 22px var(--bdl-primary-ring);
+  opacity: 0.85;
 }
 
 .bili-dl-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 .bili-dl-btn-secondary {
   margin-top: 8px;
-  background: rgba(0, 161, 214, 0.10);
-  color: var(--bdl-primary);
-  border: 1px solid rgba(0, 161, 214, 0.40);
-  box-shadow: none;
+  background: transparent;
+  color: var(--bdl-accent);
+  border: 1px solid var(--bdl-accent);
 }
 
 .bili-dl-btn-secondary:hover:not(:disabled) {
-  background: var(--bdl-primary-soft);
-  box-shadow: none;
+  background: var(--bdl-accent-soft);
 }
 
 .bili-dl-estimate {
@@ -505,8 +495,8 @@
   gap: 6px;
   margin-bottom: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
   font-size: 11px;
   color: var(--bdl-text-muted);
@@ -520,18 +510,18 @@
 .bili-dl-estimate svg {
   flex-shrink: 0;
   margin-top: 1px;
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
 }
 
 .bili-dl-hint {
   margin-bottom: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+  border: 1px solid var(--bdl-border);
   font-size: 11px;
   line-height: 1.45;
-  color: #fbbf24;
+  color: var(--bdl-text);
 }
 
 .bili-dl-hint.hidden {
@@ -543,7 +533,7 @@
   padding: 10px 12px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
 }
 
 .bili-dl-progress.hidden {
@@ -573,8 +563,8 @@
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--bdl-primary-soft);
-  color: var(--bdl-primary);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
@@ -599,7 +589,7 @@
 }
 
 #bili-dl-progress-pct {
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -609,8 +599,8 @@
 }
 
 .bili-dl-progress-track {
-  height: 6px;
-  background: #334155;
+  height: 4px;
+  background: var(--bdl-border);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -618,7 +608,7 @@
 .bili-dl-progress-bar {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--bdl-primary), var(--bdl-accent));
+  background: var(--bdl-accent);
   border-radius: 999px;
   transition: width 0.25s ease;
 }
@@ -646,7 +636,7 @@
   flex: 1;
   padding: 7px 10px;
   border: 1px solid var(--bdl-border);
-  border-radius: 8px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-surface);
   color: var(--bdl-text);
   font-size: 12px;
@@ -656,15 +646,15 @@
 }
 
 .bili-dl-action-btn:hover {
-  border-color: rgba(0, 161, 214, 0.55);
-  background: var(--bdl-primary-soft);
-  color: var(--bdl-primary);
+  border-color: var(--bdl-accent);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
 }
 
 .bili-dl-action-btn.danger:hover {
-  border-color: rgba(248, 113, 113, 0.55);
-  background: var(--bdl-error-bg);
-  color: var(--bdl-error-text);
+  border-color: var(--bdl-accent);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
 }
 
 @keyframes bili-dl-progress-indeterminate {
@@ -675,7 +665,7 @@
 .bili-dl-status {
   margin-top: 10px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--bdl-radius);
   font-size: 12px;
   line-height: 1.5;
   text-align: center;
@@ -686,19 +676,19 @@
 }
 
 .bili-dl-status.success {
-  background: var(--bdl-success-bg);
-  color: var(--bdl-success-text);
-  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
+  border: 1px solid var(--bdl-border);
 }
 
 .bili-dl-status.error {
-  background: var(--bdl-error-bg);
-  color: var(--bdl-error-text);
-  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
+  border: 1px solid var(--bdl-border);
 }
 
 .bili-dl-status-link {
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
   font-weight: 600;
   text-decoration: underline;
   margin-left: 4px;
@@ -710,10 +700,10 @@
   justify-content: space-between;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--bdl-surface);
+  background: var(--bdl-bg);
   border-top: 1px solid var(--bdl-border);
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--bdl-text-muted);
 }
 
 .bili-dl-footer-text {
@@ -736,9 +726,9 @@
   flex-shrink: 0;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--bdl-primary-soft);
-  border: 1px solid rgba(0, 161, 214, 0.40);
-  color: var(--bdl-primary);
+  background: var(--bdl-accent-soft);
+  border: 1px solid var(--bdl-border);
+  color: var(--bdl-accent);
   font-size: 10px;
   font-weight: 600;
   text-decoration: none;
@@ -747,5 +737,5 @@
 
 .bili-dl-feedback:hover,
 .bili-dl-faq-link:hover {
-  background: rgba(0, 161, 214, 0.28);
+  background: var(--bdl-accent-soft);
 }

@@ -2,7 +2,7 @@
 
 > **商店状态（2026-07-23）：** v1.0.0 首次审核未通过（政策 **1.1.3**，主功能无法测试）。  
 > Product ID：`f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。  
-> **视觉：** 整体深色主题 + 图标迭代 3.0（蓝断环 TV + 粉播放/下载）。重提时重新 `pack.py` 即可，不必升 version。
+> **视觉：** 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标（蓝底 `#00A1D6` 白三角）。重提时重新 `pack.py` 即可，不必升 version。
 
 ## 本次重提（按序做）
 
@@ -141,7 +141,7 @@ B站视频下载助手帮助您在哔哩哔哩（bilibili.com）普通视频页�
 • 登录 B 站账号可获得更高清晰度
 • 不支持合集批量；多分 P 视频可在面板内队列下载
 
-反馈 QQ：748604487
+反馈邮箱：hangdudu@agent.qq.com
 常见问题：https://snowflake-hangdudu.github.io/bili-downloader/faq.html
 ```
 
@@ -199,7 +199,7 @@ Scope / compliance:
 - Does NOT unlock VIP, paid bangumi, or bypass login/payment.
 - Privacy policy: https://snowflake-hangdudu.github.io/bili-downloader/
 - FAQ: https://snowflake-hangdudu.github.io/bili-downloader/faq.html
-- Publisher contact (China): QQ 748604487
+- Publisher contact (China): hangdudu@agent.qq.com
 
 Resubmission note (2026-07): Previous review failed with 1.1.3 because primary functions were not usable. Likely cause: testing on non-video pages and/or bilibili.com unreachable outside China. Please follow steps 1–6 above.
 ```

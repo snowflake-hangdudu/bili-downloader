@@ -3,7 +3,7 @@
 Microsoft Edge / Chrome 浏览器扩展（Manifest V3）。在 B 站视频页保存视频为 MP4，仅供个人学习使用。
 
 - 版本：1.0.0
-- 反馈 QQ：748604487
+- 反馈邮箱：hangdudu@agent.qq.com
 
 ## 功能概览
 

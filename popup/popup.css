@@ -5,23 +5,38 @@
 }
 
 :root {
-  --bdl-primary: #00a1d6;
-  --bdl-primary-hover: #33b8e0;
-  --bdl-primary-soft: rgba(0, 161, 214, 0.18);
-  --bdl-primary-ring: rgba(0, 161, 214, 0.35);
-  --bdl-accent: #fb7299;
-  --bdl-surface: #1a2332;
-  --bdl-bg: #0f172a;
-  --bdl-text: #e2e8f0;
-  --bdl-text-muted: #94a3b8;
-  --bdl-border: #334155;
-  --bdl-header-from: #0a0f18;
-  --bdl-header-to: #111827;
-  --bdl-header-text: #ffffff;
-  --bdl-success-bg: rgba(16, 185, 129, 0.14);
-  --bdl-success-text: #34d399;
-  --bdl-error-bg: rgba(239, 68, 68, 0.14);
-  --bdl-error-text: #f87171;
+  --bdl-accent: #000000;
+  --bdl-accent-contrast: #ffffff;
+  --bdl-accent-soft: rgba(0, 0, 0, 0.06);
+  --bdl-surface: #f5f5f5;
+  --bdl-bg: #ffffff;
+  --bdl-text: #111111;
+  --bdl-text-muted: #7a7a7a;
+  --bdl-border: #e3e3e3;
+  --bdl-header-text: #111111;
+  --bdl-success-bg: #f5f5f5;
+  --bdl-success-text: #111111;
+  --bdl-error-bg: #f5f5f5;
+  --bdl-error-text: #111111;
+  --bdl-radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bdl-accent: #ffffff;
+    --bdl-accent-contrast: #000000;
+    --bdl-accent-soft: rgba(255, 255, 255, 0.10);
+    --bdl-surface: #1b1b1b;
+    --bdl-bg: #101010;
+    --bdl-text: #e6e6e6;
+    --bdl-text-muted: #9a9a9a;
+    --bdl-border: #2b2b2b;
+    --bdl-header-text: #e6e6e6;
+    --bdl-success-bg: #1b1b1b;
+    --bdl-success-text: #e6e6e6;
+    --bdl-error-bg: #1b1b1b;
+    --bdl-error-text: #e6e6e6;
+  }
 }
 
 body {
@@ -40,25 +55,14 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, var(--bdl-header-from), var(--bdl-header-to));
+  padding: 12px 16px;
+  background: var(--bdl-bg);
   color: var(--bdl-header-text);
-  position: relative;
-}
-
-.popup-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--bdl-primary), var(--bdl-accent) 70%, transparent);
+  border-bottom: 1px solid var(--bdl-border);
 }
 
 .popup-icon {
   flex-shrink: 0;
-  border-radius: 8px;
 }
 
 .popup-header-text {
@@ -78,8 +82,8 @@ body {
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--bdl-surface);
+  color: var(--bdl-text-muted);
   flex-shrink: 0;
 }
 
@@ -95,14 +99,7 @@ body {
 }
 
 .popup-shimmer {
-  background: linear-gradient(90deg, var(--bdl-border) 0%, var(--bdl-bg) 45%, var(--bdl-border) 90%);
-  background-size: 200% 100%;
-  animation: popup-shimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes popup-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  background: var(--bdl-border);
 }
 
 .popup-detect.loading {
@@ -114,8 +111,8 @@ body {
 }
 
 @keyframes popup-dot-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.85); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .popup-video-card.is-loading {
@@ -130,38 +127,35 @@ body {
   padding: 9px 12px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   font-size: 12px;
   margin-bottom: 12px;
 }
 
 .popup-detect.warn {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.35);
+  background: var(--bdl-accent-soft);
+  border-color: var(--bdl-border);
 }
 
 .popup-detect.error {
-  background: var(--bdl-error-bg);
-  border-color: rgba(248, 113, 113, 0.35);
+  background: var(--bdl-accent-soft);
+  border-color: var(--bdl-border);
 }
 
 .popup-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  background: var(--bdl-accent);
   flex-shrink: 0;
 }
 
 .popup-dot.warn {
-  background: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  background: var(--bdl-accent);
 }
 
 .popup-dot.error {
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  background: var(--bdl-accent);
 }
 
 .popup-tag {
@@ -176,8 +170,8 @@ body {
   margin-left: auto;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--bdl-primary-soft);
-  color: var(--bdl-primary);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
   font-size: 11px;
   font-weight: 600;
 }
@@ -188,7 +182,7 @@ body {
   padding: 10px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   margin-bottom: 12px;
 }
 
@@ -196,16 +190,16 @@ body {
   position: relative;
   width: 88px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;
-  background: #0f172a;
+  background: var(--bdl-border);
 }
 
 .popup-sk-cover {
   position: absolute;
   inset: 0;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .popup-video-sk {
@@ -218,7 +212,8 @@ body {
 .popup-sk-line {
   display: block;
   height: 12px;
-  border-radius: 6px;
+  border-radius: 3px;
+  background: var(--bdl-border);
 }
 
 .popup-sk-line.short {
@@ -255,8 +250,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
-  background: linear-gradient(135deg, #1e293b, #334155);
+  color: var(--bdl-text-muted);
+  background: var(--bdl-border);
 }
 
 .popup-video-meta {
@@ -279,7 +274,7 @@ body {
 .video-author {
   margin-top: 5px;
   font-size: 12px;
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -341,9 +336,9 @@ body {
 }
 
 .popup-q-tag.best {
-  border-color: var(--bdl-primary);
-  background: var(--bdl-primary-soft);
-  color: var(--bdl-primary);
+  border-color: var(--bdl-accent);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
   font-weight: 600;
 }
 
@@ -357,7 +352,7 @@ body {
 
 .popup-meta-tag {
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
   color: var(--bdl-text);
@@ -374,7 +369,7 @@ body {
   padding: 10px 12px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 10px;
+  border-radius: var(--bdl-radius);
 }
 
 .popup-tips li {
@@ -389,7 +384,7 @@ body {
   content: '·';
   position: absolute;
   left: 2px;
-  color: #94a3b8;
+  color: var(--bdl-text-muted);
   font-weight: 700;
 }
 
@@ -397,27 +392,25 @@ body {
   width: 100%;
   padding: 11px 16px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  box-shadow: 0 6px 16px var(--bdl-primary-ring);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: background 0.15s;
 }
 
 .popup-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px var(--bdl-primary-ring);
+  opacity: 0.85;
 }
 
 .popup-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 .popup-tips.compact {
@@ -433,7 +426,7 @@ body {
   padding: 18px 14px 14px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 14px;
+  border-radius: var(--bdl-radius);
   margin-bottom: 12px;
 }
 
@@ -445,9 +438,9 @@ body {
   width: 52px;
   height: 52px;
   margin: 0 auto 10px;
-  border-radius: 14px;
-  background: linear-gradient(145deg, var(--bdl-primary-soft), rgba(0, 161, 214, 0.28));
-  color: var(--bdl-primary);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -482,7 +475,7 @@ body {
   padding: 9px 11px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 10px;
+  border-radius: var(--bdl-radius);
   font-size: 12px;
   color: var(--bdl-text);
   line-height: 1.45;
@@ -493,8 +486,8 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: var(--bdl-primary);
-  color: #fff;
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
   font-size: 11px;
   font-weight: 700;
   display: inline-flex;
@@ -527,22 +520,20 @@ body {
 }
 
 .popup-btn-outline {
-  background: var(--bdl-surface);
-  color: var(--bdl-primary);
-  border: 1px solid rgba(0, 161, 214, 0.40);
-  box-shadow: none;
+  background: transparent;
+  color: var(--bdl-accent);
+  border: 1px solid var(--bdl-accent);
 }
 
 .popup-btn-outline:hover {
-  background: var(--bdl-primary-soft);
-  box-shadow: none;
+  background: var(--bdl-accent-soft);
 }
 
 .popup-empty-card {
   padding: 16px 14px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
-  border-radius: 12px;
+  border-radius: var(--bdl-radius);
   margin-bottom: 12px;
 }
 
@@ -570,12 +561,12 @@ body {
 .popup-login-hint {
   margin: 0 0 10px;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+  border: 1px solid var(--bdl-border);
   font-size: 11px;
   line-height: 1.45;
-  color: #fbbf24;
+  color: var(--bdl-text);
 }
 
 .popup-login-hint.hidden {
@@ -583,7 +574,7 @@ body {
 }
 
 .popup-tips a {
-  color: var(--bdl-primary);
+  color: var(--bdl-accent);
   text-decoration: underline;
 }
 
@@ -599,7 +590,7 @@ body {
   display: inline-flex;
   padding: 5px 12px;
   border-radius: 999px;
-  background: #faf7f8;
+  background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
   color: var(--bdl-text-muted);
   font-size: 11px;
@@ -609,15 +600,16 @@ body {
 
 .popup-faq:hover {
   background: var(--bdl-bg);
+  border-color: var(--bdl-text-muted);
 }
 
 .popup-footer {
   padding: 10px 16px 12px;
   text-align: center;
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--bdl-text-muted);
   border-top: 1px solid var(--bdl-border);
-  background: var(--bdl-surface);
+  background: var(--bdl-bg);
 }
 
 .popup-footer-line {
@@ -638,9 +630,9 @@ body {
   justify-content: center;
   padding: 5px 12px;
   border-radius: 999px;
-  background: var(--bdl-primary-soft);
-  border: 1px solid rgba(0, 161, 214, 0.40);
-  color: var(--bdl-primary);
+  background: var(--bdl-accent-soft);
+  border: 1px solid var(--bdl-border);
+  color: var(--bdl-accent);
   font-size: 11px;
   font-weight: 600;
   text-decoration: none;
@@ -648,12 +640,12 @@ body {
 }
 
 .popup-feedback:hover {
-  background: rgba(0, 161, 214, 0.28);
-  border-color: rgba(0, 161, 214, 0.55);
+  background: var(--bdl-accent-soft);
+  border-color: var(--bdl-accent);
 }
 
 .popup-feedback.copied {
   background: var(--bdl-success-bg);
   border-color: rgba(52, 211, 153, 0.35);
-  color: #059669;
+  color: var(--bdl-success-text);
 }

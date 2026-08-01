@@ -1,5 +1,7 @@
 图标迭代说明（审美评审）
 
+> ⚠️ **已废弃：** 下表为旧「深色底蓝环 TV」方案的过程稿，仅存档。当前定稿改为 B 站蓝播放键（蓝底 `#00A1D6` + 白三角，形状同 YouTube 播放键），见下方「当前定稿」。
+
 基准：深色底 + 蓝断环 + 粉播放 + 粉下载（第二参考图）
 
 | 代 | 文件 | 评审 |
@@ -20,3 +22,9 @@
 
 定稿：`assets/icon-source.png` / `icons/icon*.png`
 重生：`python scripts/gen_icon_iters.py`
+
+## 当前定稿（新方案）
+
+- 形状：B 站蓝播放键（蓝底 + 白三角），与 youtube-downloader 图标结构一致
+- 生成：`python scripts/gen_icons.py` —— 读 `youtube-downloader/assets/icon-source.png`，红→蓝 `#00A1D6`、白保持、其余透明
+- 输出：`icons/icon16/32/48/128.png` + `assets/icon-source.png`（1024）

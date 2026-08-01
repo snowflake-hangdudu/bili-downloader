@@ -1,5 +1,5 @@
 const VERSION = chrome.runtime.getManifest().version;
-const FEEDBACK_QQ = '748604487';
+const FEEDBACK_QQ = 'hangdudu@agent.qq.com';
 document.getElementById('app-version').textContent = 'v' + VERSION;
 
 const $ = (id) => document.getElementById(id);
@@ -227,7 +227,7 @@ document.getElementById('feedback-qq')?.addEventListener('click', () => {
   navigator.clipboard?.writeText(FEEDBACK_QQ).then(() => {
     if (!el) return;
     const old = el.textContent;
-    el.textContent = 'QQ 号已复制，请打开 QQ 联系';
+    el.textContent = '邮箱已复制，请通过邮件联系';
     el.classList.add('copied');
     setTimeout(() => {
       el.textContent = old;

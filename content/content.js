@@ -8,7 +8,7 @@
   const AGENT = 'bili-dl-agent';
   const VERSION = chrome.runtime.getManifest().version;
   // 图标资源缓存破坏：换图标后递增 ICON_REV，避免只 F5 仍显示旧图
-  const ICON_REV = '22';
+  const ICON_REV = '26';
   const ICON_URL = chrome.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
   const FAQ_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/faq.html';
 
@@ -233,7 +233,7 @@
             <span class="bili-dl-footer-text">当前页面 · B站视频详情页</span>
             <div class="bili-dl-footer-links">
               <a class="bili-dl-faq-link" href="${FAQ_URL}" target="_blank" rel="noopener">常见问题</a>
-              <a class="bili-dl-feedback" href="tencent://message/?uin=748604487&amp;Site=qq&amp;Menu=yes" title="有问题请通过 QQ 反馈">反馈 QQ</a>
+              <a class="bili-dl-feedback" href="mailto:hangdudu@agent.qq.com" title="点击复制邮箱，打开邮件客户端写信反馈">反馈邮箱：hangdudu@agent.qq.com</a>
             </div>
           </div>
         </div>
@@ -766,8 +766,11 @@
     startBtn.onclick = startDownload;
     queueBtn.onclick = startQueueDownload;
 
-    panel.querySelector('.bili-dl-feedback')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText('748604487').catch(() => {});
+    panel.querySelector('.bili-dl-feedback')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const el = e.currentTarget;
+      navigator.clipboard?.writeText('hangdudu@agent.qq.com').catch(() => {});
+      window.location.href = 'mailto:hangdudu@agent.qq.com?subject=B站视频下载助手反馈';
     });
 
     window.__BILI_DL_API__ = {

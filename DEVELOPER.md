@@ -59,7 +59,7 @@
 | 分 P | 仅传统 `pages` 多 P；**不做合集（ugc_season）批量**（见 §0） |
 | 下载 UI | **展示进度条**（真实百分比 + 阶段文字）；支持**暂停/继续/取消**；合并阶段隐藏暂停 |
 | 清晰度 | 以 API 返回为准，**过滤虚假 1080P/4K**；低清 durl 接受 `*.bilivideo.com/cn` CDN |
-| 反馈 | QQ `748604487`，`tencent://` + 复制号码 |
+| 反馈 | 邮箱 `hangdudu@agent.qq.com`，`mailto:` + 复制邮箱 |
 | 合规 | 个人学习；不绕过会员/付费番剧；不上传数据 |
 
 ---
@@ -75,7 +75,7 @@
 | Edge 上架说明 | 见 `store/EDGE_SUBMIT.md` |
 | GitHub Pages 说明 | 见 `store/GITHUB_PAGES.md` |
 
-**Edge 商店状态（2026-07-23）：** v1.0.0 首次审核未通过（**1.1.3**，主功能无法测试）。Product ID `f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。视觉已定：深色主题 + 图标 3.0。**重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。**
+**Edge 商店状态（2026-07-23）：** v1.0.0 首次审核未通过（**1.1.3**，主功能无法测试）。Product ID `f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。视觉已定：黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标。**重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。**
 
 ---
 
@@ -91,7 +91,7 @@ bilibili-downloader/
 ├── content/
 │   ├── page-agent.js          # ★ MAIN world：API、CDN、合并、下载
 │   ├── content.js             # ★ ISOLATED world：悬浮 UI、postMessage、popup 通信
-│   └── content.css            # 悬浮面板样式（深蓝灰主题）
+│   └── content.css            # 悬浮面板样式（黑白极简主题）
 ├── popup/
 │   ├── popup.html/js/css      # 工具栏弹窗：视频信息、打开面板、QQ 反馈
 ├── lib/
@@ -203,7 +203,7 @@ content.js 的 `updateProgress()` 据此更新进度条；`agentSignal(type)` �
 - FAB 按钮 64×64，图标 `icons/icon128.png`
 - 面板宽 400px：**识别条** → **视频卡片** → **分 P 列表** → **清晰度胶囊** → 预计大小 / 登录提示 → 格式 MP4 → 开始下载 / **队列下载全部分 P**
 - **下载进度区**（下载时显示）：视频名、清晰度标签、阶段文字、百分比、进度条；下方「暂停」「取消」（合并阶段隐藏暂停）
-- 底栏：`常见问题`（FAQ Pages）+ QQ 反馈
+- 底栏：`常见问题`（FAQ Pages）+ 反馈邮箱
 - 失败 status 带「查看常见问题」链接（锚点：`#cdn-403` 等）
 - 成功/失败：简短 status 条
 
@@ -213,7 +213,7 @@ content.js 的 `updateProgress()` 据此更新进度条；`agentSignal(type)` �
 - **B 站视频页**：展示封面、标题、UP、可用清晰度标签、「打开下载面板」
 - **非视频页**：三步引导 + 当前页面地址 +「前往 B 站」按钮
 - **加载/通信失败**：错误提示 +「刷新并重试」
-- 底栏 QQ 反馈（同面板）
+- 底栏邮箱反馈（同面板）
 
 **分工：** popup 看信息 + 跳转面板；**实际下载只在面板操作**。
 
@@ -311,14 +311,14 @@ qn > 64   → fnval=16 DASH → 下视频轨 + 音频轨 → mergeM4sInPage
 | popup UI | `popup/*` |
 | CDN 镜像 | `page-agent.js` → `MIRRORS` |
 | 新页面类型 | `manifest.json` matches + `parseVideoId()`（仅 `BV`/`av`，不含番剧） |
-| 反馈 QQ | `content.js` 底栏、`popup.html`、`docs/index.html` |
+| 反馈邮箱 | `content.js` 底栏、`popup.html`、`docs/index.html` |
 | 图标 | 换 `assets/icon-source.png` → `python scripts/gen_icons.py` |
 | 商店图 | `python scripts/gen_store_assets.py` |
 
 ### 改 UI 主题
 
-CSS 变量在 `content/content.css` 顶部 `--bdl-*`（**整体深色**：面板底 `#0f172a` / 卡片 `#1a2332`，主色蓝 `#00A1D6`，粉 `#FB7299` 点缀）。popup 同步。  
-图标：深色蓝环方案第 10 代定稿（`assets/icon-source.png`；过程稿 `assets/icon-iters/`）。换图后递增 `content.js` 的 `ICON_REV` 并重载扩展；商店素材同步 `store/logo-300.png`。
+CSS 变量在 `content/content.css` 顶部 `--bdl-*`（**黑白极简，跟随系统深浅色**：亮色强调纯黑、深色强调纯白，无彩色）。popup 同步。  
+图标：B 站蓝播放键（蓝底 `#00A1D6` + 白三角，形状同 YouTube 播放键；`assets/icon-source.png` 由 `scripts/gen_icons.py` 从 `youtube-downloader/assets/icon-source.png` 映射生成）。换图后递增 `content.js` 的 `ICON_REV` 并重载扩展；商店素材同步 `store/logo-300.png`。
 
 ### 加 popup 功能
 
@@ -478,4 +478,4 @@ python scripts/gen_store_assets.py
 
 ---
 
-*文档与代码同步至 v1.0.0（2026-07-23，深色主题 + 图标 3.0，Edge 待重提）。改架构或产品决策请更新本文对应章节。*
+*文档与代码同步至 v1.0.0（2026-07-23，黑白极简主题 + B 站蓝播放键图标，Edge 待重提）。改架构或产品决策请更新本文对应章节。*
