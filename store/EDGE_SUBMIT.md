@@ -41,6 +41,8 @@
 
 路径：`bilibili-downloader.zip`（运行 `python scripts/pack.py` 生成）
 
+> **注意：** Edge 校验 manifest / `_locales/*/messages.json` 的 **Description ≤ 190 字符**（英文 `extDesc` 尤易超限）。超出会报 `Package Validation Errors`。
+
 ---
 
 ## 第一步：注册开发者

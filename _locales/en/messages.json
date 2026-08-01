@@ -3,6 +3,6 @@
     "message": "Bilibili Video Download Assistant"
   },
   "extDesc": {
-    "message": "Download Bilibili (/video) pages as MP4 or M4A audio. Quality select, A/V merge, multi-part queue, download history. Personal learning only. No data collected. Works on bilibili.com video pages."
+    "message": "Download Bilibili /video as MP4 or M4A. Quality, A/V merge, multi-part queue, history. Personal learning only. No data collected."
   }
 }
