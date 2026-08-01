@@ -1,6 +1,6 @@
 # B站视频下载助手 — 开发者文档
 
-> **版本：1.0.0** | Manifest V3 | 更新：2026-07-23  
+> **版本：1.0.1** | Manifest V3 | 更新：2026-08-01  
 > **新开会话请先通读本文 + `manifest.json`。** 读完应能改 bug、加功能、打包、更新商店。  
 > **对外页面（`docs/` 隐私/FAQ）勿写实现细节**，只写用户能操作的说明。
 
@@ -75,7 +75,7 @@
 | Edge 上架说明 | 见 `store/EDGE_SUBMIT.md` |
 | GitHub Pages 说明 | 见 `store/GITHUB_PAGES.md` |
 
-**Edge 商店状态（2026-07-23）：** v1.0.0 首次审核未通过（**1.1.3**，主功能无法测试）。Product ID `f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。视觉已定：黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标。**重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。**
+**Edge 商店状态（2026-08-01）：** 版本已升至 **1.0.1**（黑白极简主题 + B 站蓝播放键图标 + 反馈邮箱 `hangdudu@agent.qq.com`）。重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。
 
 ---
 
@@ -304,7 +304,7 @@ qn > 64   → fnval=16 DASH → 下视频轨 + 音频轨 → mergeM4sInPage
 
 | 任务 | 位置 |
 |------|------|
-| 改版本 | `manifest.json` → `version`（**商店未上线前保持 1.0.0**；通过后再递增） |
+| 改版本 | `manifest.json` → `version`（当前 **1.0.1**） |
 | 改扩展名/描述 | `_locales/zh_CN`、`en` |
 | 下载/CDN/清晰度 | `page-agent.js` |
 | 悬浮 UI | `content.js` + `content.css` |
@@ -367,12 +367,12 @@ python scripts/gen_store_assets.py
 |------|--------|
 | `scripts/pack.py` 的 `INCLUDE`：新增运行文件必须加进列表，否则商店包缺文件 | **不要**把 `bilibili-downloader.zip` 提交 Git（已在 `.gitignore`） |
 | **上传商店前**本地重新 `pack.py`，确认 zip 日期/体积合理 | 不必为每次本地调试建版本目录；开发者模式直接加载解压目录 |
-| 审核中：**version 保持 1.0.0**，改功能后若需重传审核包再打一次同版本 zip（以 Partner Center 当时规则为准） | 不必把 `docs/`、`store/`、`DEVELOPER.md`、`test/` 打进扩展 zip |
-| 上线后发更新：先升 `manifest.json` version，再 `pack.py`，再上传 | 不必长期保留一堆旧 zip；需要可本地另存 `releases/bilibili-downloader-1.0.0.zip`（可选，不入库） |
+| 审核中：version 递增后**不要回退**，改功能后若需重传审核包再打一次同版本 zip（以 Partner Center 当时规则为准） | 不必把 `docs/`、`store/`、`DEVELOPER.md`、`test/` 打进扩展 zip |
+| 上线后发更新：先升 `manifest.json` version，再 `pack.py`，再上传 | 不必长期保留一堆旧 zip；需要可本地另存 `releases/bilibili-downloader-1.0.1.zip`（可选，不入库） |
 
 **本机检查清单（上传前）：**
 
-1. `manifest.json` → `version` 符合当前策略（未上线 = `1.0.0`）  
+1. `manifest.json` → `version` 符合当前策略（当前 = `1.0.1`）  
 2. `python scripts/pack.py`  
 3. 解压 zip 看一眼：根目录有 `manifest.json`，有 `content/`、`popup/`、`lib/`、`icons/`、`_locales/`  
 4. Partner Center 上传该 zip  
@@ -424,7 +424,8 @@ python scripts/gen_store_assets.py
 
 | 版本 | 说明 |
 |------|------|
-| v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux；含进度条/暂停取消、分 P 队列、预估体积、登录提示、FAQ、进度 MB、失败短指引、并行下载与 CDN 探测等。2026-07-22 Edge 首审未过（1.1.3 测不通），完善 `EDGE_SUBMIT.md` 后重提；未上线前不递增 version |
+| v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux；含进度条/暂停取消、分 P 队列、预估体积、登录提示、FAQ、进度 MB、失败短指引、并行下载与 CDN 探测等。2026-07-22 Edge 首审未过（1.1.3 测不通），完善 `EDGE_SUBMIT.md` 后重提 |
+| v1.0.1 | 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标 + 悬浮按钮圆角方形 + 反馈改为邮箱 `hangdudu@agent.qq.com`（mailto 直连） |
 
 ---
 
@@ -449,7 +450,7 @@ python scripts/gen_store_assets.py
 ## 18. 后续优化清单（未实现，仅文档）
 
 > v1.0.0 已实现：分 P 队列、下载预估、登录提示、FAQ、进度 MB、失败短指引。合集批量 **不做**（见 §0）。  
-> Edge 首审未过（1.1.3）；重提见 `store/EDGE_SUBMIT.md`。**未上线前 version 保持 1.0.0**；通过后再递增发更新包。
+> Edge 首审未过（1.1.3）；重提见 `store/EDGE_SUBMIT.md`。当前版本 **1.0.1**。
 
 ### 内容 / 体验（优先考虑）
 
@@ -478,4 +479,4 @@ python scripts/gen_store_assets.py
 
 ---
 
-*文档与代码同步至 v1.0.0（2026-07-23，黑白极简主题 + B 站蓝播放键图标，Edge 待重提）。改架构或产品决策请更新本文对应章节。*
+*文档与代码同步至 v1.0.1（2026-08-01，黑白极简主题 + B 站蓝播放键图标 + 邮箱反馈）。改架构或产品决策请更新本文对应章节。*

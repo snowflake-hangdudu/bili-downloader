@@ -1,8 +1,8 @@
-# Microsoft Edge 上架填写参考（v1.0.0）
+# Microsoft Edge 上架填写参考（v1.0.1）
 
-> **商店状态（2026-07-23）：** v1.0.0 首次审核未通过（政策 **1.1.3**，主功能无法测试）。  
-> Product ID：`f2db821e-8942-4cc6-99d1-509775796785`。未上线前 version 保持 **1.0.0**。  
-> **视觉：** 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标（蓝底 `#00A1D6` 白三角）。重提时重新 `pack.py` 即可，不必升 version。
+> **商店状态（2026-08-01）：** 当前提交 **v1.0.1**（黑白极简主题 + B 站蓝播放键图标 + 反馈邮箱 `hangdudu@agent.qq.com`）。  
+> Product ID：`f2db821e-8942-4cc6-99d1-509775796785`。  
+> **视觉：** 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标（蓝底 `#00A1D6` 白三角）。重提时重新 `pack.py` 即可。
 
 ## 本次重提（按序做）
 
@@ -15,7 +15,7 @@
 2. 打包（项目根目录）
    python scripts/pack.py
    → 得到 bilibili-downloader.zip
-   （确认 zip 根目录有 manifest.json，version = 1.0.0）
+   （确认 zip 根目录有 manifest.json，version = 1.0.1）
 
 3. Partner Center
    https://partner.microsoft.com/dashboard → 该扩展
@@ -231,7 +231,7 @@ Resubmission note (2026-07): Previous review failed with 1.1.3 because primary f
 1. 无痕窗口加载已解压扩展目录  
 2. 打开 `https://www.bilibili.com/video/BV1GJ411x7h7` → F5  
 3. 右下角 FAB → 选 720P → 下载成功  
-4. `python scripts/pack.py` → 确认 zip 根目录有 `manifest.json`，version 仍为 `1.0.0`
+4. `python scripts/pack.py` → 确认 zip 根目录有 `manifest.json`，version 仍为 `1.0.1`
 
 ### Partner Center 操作
 
