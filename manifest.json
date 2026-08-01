@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "__MSG_extDesc__",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://*.bilivideo.com/*",
@@ -52,7 +52,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "icons/icon48.png", "icons/icon128.png"],
+      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "icons/icon128.png"],
       "matches": ["https://*.bilibili.com/*"]
     }
   ]

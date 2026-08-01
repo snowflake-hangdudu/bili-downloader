@@ -46,6 +46,86 @@ function formatCurrentSite(url) {
   }
 }
 
+const HISTORY_KEY = 'biliDlHistory';
+
+function historyPartKey(h) {
+  if (h?.cid) return `c:${h.cid}`;
+  return `b:${h?.bvid || ''}#${h?.pageIndex ?? 0}`;
+}
+
+/** 同集同格式只留一条；MP4 与故意下的 M4A 可并列 */
+function pruneHistoryItems(items) {
+  const kept = [];
+  const seen = new Set();
+  for (const h of (Array.isArray(items) ? items : []).filter(Boolean)) {
+    const fmt = h.format === 'm4a' ? 'm4a' : 'mp4';
+    const dedupeKey = `${historyPartKey(h)}|${fmt}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    kept.push(h);
+  }
+  return kept;
+}
+
+async function loadHistory() {
+  try {
+    const { [HISTORY_KEY]: items } = await chrome.storage.local.get(HISTORY_KEY);
+    return pruneHistoryItems(items);
+  } catch {
+    return [];
+  }
+}
+
+function historyEntryUrl(entry) {
+  if (!entry?.bvid) return null;
+  return `https://www.bilibili.com/video/${entry.bvid}${entry.pageIndex > 0 ? `?p=${entry.pageIndex + 1}` : ''}`;
+}
+
+function formatHistoryTime(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatBytes(n) {
+  const v = Number(n) || 0;
+  if (v >= 1024 * 1024 * 1024) return (v / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  if (v >= 1024 * 1024) return (v / 1024 / 1024).toFixed(1) + ' MB';
+  if (v >= 1024) return Math.round(v / 1024) + ' KB';
+  if (v > 0) return v + ' B';
+  return '0 B';
+}
+
+async function renderPopupHistory() {
+  const items = await loadHistory();
+  const countEl = $('popup-history-count');
+  const listEl = $('popup-history-list');
+  const clearEl = $('popup-history-clear');
+  if (items.length) {
+    countEl.textContent = items.length;
+    countEl.classList.remove('hidden');
+    clearEl.classList.remove('hidden');
+    listEl.innerHTML = items.map((h, i) => {
+      const url = historyEntryUrl(h);
+      const link = url
+        ? `<a class="popup-history-open" href="${url}" data-idx="${i}" target="_blank" rel="noopener">打开</a>`
+        : '';
+      return `
+        <div class="popup-history-item">
+          <div class="popup-history-item-main">
+            <div class="popup-history-item-title" title="${(h.title || '').replace(/"/g, '&quot;')}">${h.title || '未命名'}</div>
+            <div class="popup-history-item-meta">${formatHistoryTime(h.ts)} · ${h.label || ''}${h.format === 'm4a' ? ' · M4A' : ''}${h.fileSize ? ' · ' + formatBytes(h.fileSize) : ''}</div>
+          </div>
+          ${link}
+        </div>`;
+    }).join('');
+  } else {
+    countEl.classList.add('hidden');
+    clearEl.classList.add('hidden');
+    listEl.innerHTML = '<div class="popup-history-empty">暂无下载记录</div>';
+  }
+}
+
 function showEmptyState(tab) {
   const siteEl = $('empty-current-site');
   if (siteEl) siteEl.textContent = formatCurrentSite(tab?.url);
@@ -221,6 +301,20 @@ async function init() {
 }
 
 init();
+
+document.getElementById('popup-history-toggle')?.addEventListener('click', async () => {
+  const panel = document.getElementById('popup-history-panel');
+  const hidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !hidden);
+  if (hidden) await renderPopupHistory();
+});
+
+document.getElementById('popup-history-clear')?.addEventListener('click', async () => {
+  await chrome.storage.local.set({ [HISTORY_KEY]: [] });
+  await renderPopupHistory();
+});
+
+renderPopupHistory();
 
 document.getElementById('feedback-qq')?.addEventListener('click', () => {
   const el = document.getElementById('feedback-qq');

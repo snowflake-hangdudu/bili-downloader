@@ -1,6 +1,6 @@
 # B站视频下载助手 — 开发者文档
 
-> **版本：1.0.1** | Manifest V3 | 更新：2026-08-01  
+> **版本：1.0.2** | Manifest V3 | 更新：2026-08-02  
 > **新开会话请先通读本文 + `manifest.json`。** 读完应能改 bug、加功能、打包、更新商店。  
 > **对外页面（`docs/` 隐私/FAQ）勿写实现细节**，只写用户能操作的说明。
 
@@ -55,7 +55,7 @@
 |------|------|
 | 目标用户 | **优先中国人**，界面全中文，`default_locale: zh_CN` |
 | 收费 | **v1.0 全免费**，无内购/激活码 |
-| 功能范围 | **仅普通视频页 MP4**（`/video/BV|av`），**不支持番剧页**；无「仅音频」、无设置/历史/输出页 |
+| 功能范围 | **仅普通视频页 MP4**（`/video/BV|av`），**不支持番剧页**；已支持「仅音频（M4A）」与「下载历史」（v1.0.1+） |
 | 分 P | 仅传统 `pages` 多 P；**不做合集（ugc_season）批量**（见 §0） |
 | 下载 UI | **展示进度条**（真实百分比 + 阶段文字）；支持**暂停/继续/取消**；合并阶段隐藏暂停 |
 | 清晰度 | 以 API 返回为准，**过滤虚假 1080P/4K**；低清 durl 接受 `*.bilivideo.com/cn` CDN |
@@ -75,7 +75,7 @@
 | Edge 上架说明 | 见 `store/EDGE_SUBMIT.md` |
 | GitHub Pages 说明 | 见 `store/GITHUB_PAGES.md` |
 
-**Edge 商店状态（2026-08-01）：** 版本已升至 **1.0.1**（黑白极简主题 + B 站蓝播放键图标 + 反馈邮箱 `hangdudu@agent.qq.com`）。重提清单见 `store/EDGE_SUBMIT.md` 文首「本次重提」。
+**Edge 商店状态（2026-08-02）：** 准备发 **1.0.2**（并行下载 + 独立进度卡等）。发版步骤见 `store/EDGE_SUBMIT.md` 文首。
 
 ---
 
@@ -304,7 +304,7 @@ qn > 64   → fnval=16 DASH → 下视频轨 + 音频轨 → mergeM4sInPage
 
 | 任务 | 位置 |
 |------|------|
-| 改版本 | `manifest.json` → `version`（当前 **1.0.1**） |
+| 改版本 | `manifest.json` → `version`（当前 **1.0.2**） |
 | 改扩展名/描述 | `_locales/zh_CN`、`en` |
 | 下载/CDN/清晰度 | `page-agent.js` |
 | 悬浮 UI | `content.js` + `content.css` |
@@ -372,7 +372,7 @@ python scripts/gen_store_assets.py
 
 **本机检查清单（上传前）：**
 
-1. `manifest.json` → `version` 符合当前策略（当前 = `1.0.1`）  
+1. `manifest.json` → `version` 符合当前策略（当前 = `1.0.2`）  
 2. `python scripts/pack.py`  
 3. 解压 zip 看一眼：根目录有 `manifest.json`，有 `content/`、`popup/`、`lib/`、`icons/`、`_locales/`  
 4. Partner Center 上传该 zip  
@@ -425,7 +425,8 @@ python scripts/gen_store_assets.py
 | 版本 | 说明 |
 |------|------|
 | v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux；含进度条/暂停取消、分 P 队列、预估体积、登录提示、FAQ、进度 MB、失败短指引、并行下载与 CDN 探测等。2026-07-22 Edge 首审未过（1.1.3 测不通），完善 `EDGE_SUBMIT.md` 后重提 |
-| v1.0.1 | 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标 + 悬浮按钮圆角方形 + 反馈改为邮箱 `hangdudu@agent.qq.com`（mailto 直连） |
+| v1.0.1 | 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标 + 悬浮按钮圆角方形 + 反馈改为邮箱 `hangdudu@agent.qq.com`（mailto 直连）+ M4A 音频模式（DASH 音频轨直存）+ 下载历史（最近 50 条，可跳转重下）+ 文件名按码点截断 + SPA 路由即时刷新（pushState/popstate 监听）+ FAB 可拖拽并记住位置 + 合并库按需加载 + 轻请求超时 20s/下载 600s + 下载中切页保护 + `storage` 权限 |
+| v1.0.2 | 多任务并行下载（最多 3 路）+ 每任务独立进度卡（可单独暂停/取消）+ FAB 拖拽修复（禁 img 原生拖）+ 历史 MP4/M4A 可并列 + 会话缓存按 `href#p=` + 分 P 并行/重试短提示 + 商店 Search Terms / 更新说明 / `_locales` 检索文案 |
 
 ---
 
@@ -447,36 +448,40 @@ python scripts/gen_store_assets.py
 
 ---
 
-## 18. 后续优化清单（未实现，仅文档）
+## 18. 后续优化清单
 
-> v1.0.0 已实现：分 P 队列、下载预估、登录提示、FAQ、进度 MB、失败短指引。合集批量 **不做**（见 §0）。  
-> Edge 首审未过（1.1.3）；重提见 `store/EDGE_SUBMIT.md`。当前版本 **1.0.1**。
+> 合集批量 **不做**（见 §0）。当前版本 **1.0.2**。商店文案 / 更新说明见 `store/EDGE_SUBMIT.md`。
 
-### 内容 / 体验（优先考虑）
+### 已完成
 
-| 优先级 | 项 | 说明 |
-|--------|-----|------|
-| ✅ | FAQ「分 P ≠ 合集」 | `docs/faq.html` `#parts`（仍属 v1.0.0） |
-| ✅ | 进度细化 | 下载「已下/总量」MB；合并「正在合成，约 XX MB」 |
-| ✅ | 失败文案收紧 | 「先播放 / 换 720P / 刷新」短指引 |
-| 中 | SPA 路由监听 | `pushState`/`popstate` 替代 1s 轮询，切视频更快刷新面板 |
-| 低 | popup 文案 | 非视频页提示再短一点 |
-| 低 | 商店更新说明模板 | 每次发版 3 条用户能看懂的变化 |
+| 项 | 说明 |
+|----|------|
+| FAQ「分 P ≠ 合集」 | `docs/faq.html` `#parts` |
+| 进度细化 / 失败短指引 | MB 进度、先播放 / 换 720P 等 |
+| SPA 路由监听 | `pushState` / `popstate` / `replaceState` |
+| FAB 可拖拽 + 位置持久化 | 已修：禁用 img 原生拖图 + document 级 pointer（旧实现在 B 站页常失效） |
+| 文件名按码点截断 | `page-agent.js` |
+| 视频信息会话缓存 | 10s TTL，键为 `href#p=`，切分 P / SPA 会失效 |
+| 队列失败自动重试 1 次 | 间隔约 1s，标题显示「重试中…」；整队失败短提示 |
+| 并行下载 | 单集最多 3 路并行；分 P 队列同限 3 路；page-agent 每任务独立 session |
+| 独立进度卡 | 每任务单独暂停/取消，互不影响 |
+| 商店更新说明 + Search Terms | `store/EDGE_SUBMIT.md` 第五步 / 「更新说明」；发 1.0.2 |
 
-### 工程 / 体验（可选）
+### 未实现（可选）
 
 | 优先级 | 项 | 说明 | 涉及文件 |
 |--------|-----|------|----------|
+| 低 | popup 文案 | 非视频页提示再短一点 | `popup/*` |
+| 低 | 历史入口进 popup | 非视频页也能看历史 | `popup.js`, `popup.html` |
+| 低 | 键盘快捷键 | 如 `Alt+D` 打开面板（`commands`） | `manifest.json`, `content.js` |
+| 低 | ICON_REV 自动化 | 读文件 hash 生成，免手动递增 | `scripts/`, `content.js` |
+| 低 | 工具函数抽取 | `formatView`/`formatTime` → `lib/format.js` | `lib/`, `content.js`, `popup.js` |
+| 低 | popup 选分 P | 打开面板时带 `pageIndex` | `popup.js`, `content.js` |
 | 低 | `chrome.downloads` | 可选保存路径（需新权限，上架要说明） | `manifest.json`, `content.js` |
-| 低 | FAB 可拖拽 | 避免挡播放器控件 | `content.js`, `content.css` |
-| 低 | 键盘快捷键 | 如 `Alt+D` 打开面板 | `content.js` |
 | 低 | 远程镜像配置 | GitHub raw 更新 `MIRRORS`，免发版 | `page-agent.js`, `background.js` |
 | 低 | 单元测试扩展 | mock fetch 测清晰度过滤等 | `test/` |
-| 低 | popup 选分 P | 打开面板时带 `pageIndex` | `popup.js`, `content.js` |
-| 低 | 工具函数抽取 | `formatView`/`formatTime` → `lib/format.js` | `lib/`, `content.js`, `popup.js` |
-| 低 | 文件名截断 | 按字符数截断，避免中文乱码 | `page-agent.js` |
-| — | 合集批量下载 | `ugc_season`；**明确搁置** | — |
+| — | 合集批量下载 | `ugc_season`；**明确搁置**（审核风险） | — |
 
 ---
 
-*文档与代码同步至 v1.0.1（2026-08-01，黑白极简主题 + B 站蓝播放键图标 + 邮箱反馈）。改架构或产品决策请更新本文对应章节。*
+*文档与代码同步至 v1.0.2（并行进度卡、发版清单）。改架构或产品决策请更新本文对应章节。*

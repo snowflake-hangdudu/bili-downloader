@@ -1,28 +1,34 @@
-# Microsoft Edge 上架填写参考（v1.0.1）
+# Microsoft Edge 上架填写参考（v1.0.2）
 
-> **商店状态（2026-08-01）：** 当前提交 **v1.0.1**（黑白极简主题 + B 站蓝播放键图标 + 反馈邮箱 `hangdudu@agent.qq.com`）。  
-> Product ID：`f2db821e-8942-4cc6-99d1-509775796785`。  
-> **视觉：** 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标（蓝底 `#00A1D6` 白三角）。重提时重新 `pack.py` 即可。
+> **商店状态（2026-08-02）：** 准备提交 **v1.0.2**（并行下载 + 独立进度卡 + 拖拽修复等）。  
+> Product ID：`f2db821e-8942-4cc6-99d1-509775796785` · Store ID：`0RDCKF6C35QD`  
+> 直链：https://microsoftedge.microsoft.com/addons/detail/fdcimmafpnpkehegehnjjklloqfjmem  
 
-## 本次重提（按序做）
+## 本次发版 1.0.2（按序做）
 
 ```text
 1. 本机验通
    edge://extensions → 重新加载 → 打开
    https://www.bilibili.com/video/BV1GJ411x7h7 → F5
    右下角按钮 → 720P → 下载成功
+   （可选）再下一个并行任务，确认两张进度卡可单独取消
 
 2. 打包（项目根目录）
    python scripts/pack.py
-   → 得到 bilibili-downloader.zip
-   （确认 zip 根目录有 manifest.json，version = 1.0.1）
+   → bilibili-downloader.zip
+   （确认 zip 根目录有 manifest.json，version = 1.0.2）
 
-3. Partner Center
+3. Partner Center → Update
    https://partner.microsoft.com/dashboard → 该扩展
+   · 上传 bilibili-downloader.zip
    · Markets：优先仅「中国」
-   · Store listing：可用本文第五步描述（强调仅 /video 页、右下角入口）
-   · Notes for Certification：粘贴本文第七步英文全文（必填）
-   · 上传刚打的 zip → Submit
+   · Store listings：
+       - 中文/英文 Description：可用本文第五步（可微调）
+       - Search terms：粘贴本文「Search terms」（中英文各填）
+       - 更新说明 / What's new：粘贴本文「1.0.2 更新说明」
+       - 若 1.0.1 已 Live 且尚未填过 1.0.1 说明，可先贴 1.0.1 再贴 1.0.2（或只贴 1.0.2）
+   · Notes for Certification：粘贴本文第七步英文全文
+   · Submit
 ```
 
 审核备注与拒审说明见下文第七步、文末「若被拒 / 重提清单」。
@@ -77,6 +83,11 @@
 向当前 B 站视频页注入必要脚本，以读取视频元数据并在页面内完成下载（Manifest V3 要求）。
 ```
 
+**storage**
+```
+仅在本地保存用户的下载历史记录与悬浮按钮位置，不上传任何数据。
+```
+
 **https://*.bilibili.com/***
 ```
 访问 B 站视频页面与官方 API，获取视频标题、清晰度等公开信息。
@@ -114,41 +125,110 @@ https://snowflake-hangdudu.github.io/bili-downloader/
 
 B站视频下载助手
 
-### Description（详细描述）
+### Description（详细描述）— 中文 listing
 
 ```
-B站视频下载助手帮助您在哔哩哔哩（bilibili.com）普通视频页保存视频为 MP4。面向中国用户；请在可访问 bilibili.com 的网络环境下使用。
+B站视频下载助手：在哔哩哔哩（bilibili.com）普通视频页下载 MP4 视频或 M4A 音频。面向中国用户；请在可访问 bilibili.com 的网络环境下使用。
 
-重要：仅在视频页生效（地址含 /video/BV… 或 /video/av…）。首页、搜索页、番剧页没有下载按钮。主入口为页面右下角圆形悬浮按钮。
+重要：仅在 /video/BV… 或 /video/av… 视频页生效。首页、搜索页、番剧页没有下载按钮。主入口为页面右下角悬浮按钮。
 
 主要功能：
-• 自动识别当前 B 站视频页，显示标题、UP 主、可用清晰度
-• 支持 360P～1080P 等真实可下载清晰度（以视频源为准）
-• 高清视频自动合并音视频，输出 MP4
-• 下载进度条显示真实进度，支持暂停与取消
-• 右下角悬浮面板 + 工具栏 popup，一键下载
-• 完全免费，不收集任何用户数据
+• 识别当前视频：标题、UP 主、可用清晰度
+• 真实清晰度（360P～1080P 等，以片源为准），高清自动合并为 MP4
+• 可选 M4A 仅音频；多分 P / 多任务并行下载（每任务独立进度，可单独取消）
+• 本地下载历史；悬浮按钮可拖拽
+• 完全免费，不收集用户数据
 
 使用说明：
-1. 打开 bilibili.com 任意普通视频页（例如 https://www.bilibili.com/video/BV1GJ411x7h7）
-2. 点击页面右下角悬浮按钮（或浏览器工具栏图标 → 打开下载面板）
-3. 选择清晰度（建议先试 720P 或更低）→ 开始下载（可暂停/取消）
-4. 若下载失败，请先播放视频 2～3 秒再重试
+1. 打开 https://www.bilibili.com/video/BV1GJ411x7h7 （或任意普通视频页）
+2. 点击右下角悬浮按钮（或工具栏图标 → 打开下载面板）
+3. 选清晰度（建议先试 720P）→ 开始下载
+4. 若失败：先播放 2～3 秒再重试
 
-重要说明：
-• 仅供个人学习与研究，请遵守 B 站用户协议与著作权法
-• 不破解大会员、不绕过付费番剧
-• 登录 B 站账号可获得更高清晰度
-• 不支持合集批量；多分 P 视频可在面板内队列下载
-
-反馈邮箱：hangdudu@agent.qq.com
-常见问题：https://snowflake-hangdudu.github.io/bili-downloader/faq.html
+说明：仅供个人学习；不破解会员、不绕过付费；不支持合集批量。
+反馈：hangdudu@agent.qq.com
+FAQ：https://snowflake-hangdudu.github.io/bili-downloader/faq.html
 ```
 
-### Search terms（搜索词，可选）
+### Search terms（中文 listing — 必填/尽量填满，便于检索）
 
 ```
-bilibili, B站, 视频, 下载, MP4, 哔哩哔哩
+B站下载, bilibili下载, 哔哩哔哩, 视频下载, MP4, M4A, BV下载, 分P下载
+```
+
+### English listing — Description（Add language: English 时粘贴）
+
+```
+Bilibili Video Download Assistant saves videos from bilibili.com /video pages as MP4 (or audio as M4A). For users who can access bilibili.com (mainly mainland China).
+
+IMPORTANT: Works ONLY on /video/BV… or /video/av… pages. No download UI on homepage, search, or bangumi. Primary entry: floating button at the bottom-right of the video page.
+
+Features:
+• Detect title, uploader, and real available qualities
+• Auto merge DASH audio/video into MP4; optional M4A audio-only
+• Parallel downloads (up to 3) with separate progress cards; per-task cancel
+• Multi-part (分P) parallel queue with automatic retry
+• Local download history; draggable FAB
+• Free; no user data collected
+
+How to test:
+1. Open https://www.bilibili.com/video/BV1GJ411x7h7
+2. Click the bottom-right floating button
+3. Select 720P or lower → Start download
+
+Personal learning only. Does not unlock VIP or paid content. Does not batch-download seasons (ugc_season).
+Contact: hangdudu@agent.qq.com
+FAQ: https://snowflake-hangdudu.github.io/bili-downloader/faq.html
+```
+
+### English listing — Search terms
+
+```
+bilibili, bilibili download, bilibili mp4, download bilibili video, b站, bilibili downloader, m4a
+```
+
+### 更新说明 / What's new（粘贴到 Store listings）
+
+**位置：** Partner Center → Store listings → 中文 / English → **更新说明 / What's new** → 保存。
+
+#### 1.0.2（本次发版 — 优先粘贴）
+
+中文：
+
+```
+1.0.2 更新：
+• 支持多任务并行下载（最多 3 路），每个任务独立进度卡，可单独暂停/取消
+• 修复悬浮按钮拖拽；下载历史支持同集 MP4 与 M4A 并列
+• 分 P 队列并行更稳（失败自动重试）；会话缓存与商店检索文案优化
+```
+
+英文：
+
+```
+1.0.2:
+• Parallel downloads (up to 3) with separate progress cards; per-task pause/cancel
+• Fixed draggable FAB; MP4 and M4A history can coexist for the same video
+• Parallel multi-part queue with retry; better store search terms
+```
+
+#### 1.0.1（若 Live 后尚未填过，可补贴）
+
+中文：
+
+```
+1.0.1 更新：
+• 支持 M4A 仅音频下载；新增本地下载历史
+• 黑白极简界面；悬浮按钮可拖拽；反馈改为邮箱
+• 多分 P 队列更稳（失败自动重试）；站内切视频即时刷新
+```
+
+英文：
+
+```
+1.0.1:
+• M4A audio-only download + local download history
+• Minimal UI; draggable FAB; email feedback
+• Multi-part queue retry; faster in-site video switch
 ```
 
 ---
@@ -231,7 +311,7 @@ Resubmission note (2026-07): Previous review failed with 1.1.3 because primary f
 1. 无痕窗口加载已解压扩展目录  
 2. 打开 `https://www.bilibili.com/video/BV1GJ411x7h7` → F5  
 3. 右下角 FAB → 选 720P → 下载成功  
-4. `python scripts/pack.py` → 确认 zip 根目录有 `manifest.json`，version 仍为 `1.0.1`
+4. `python scripts/pack.py` → 确认 zip 根目录有 `manifest.json`，version = `1.0.2`
 
 ### Partner Center 操作
 

@@ -454,6 +454,64 @@
     throw new Error('无法获取播放流');
   }
 
+  function safeFilename(name, fallback) {
+    const cleaned = (name || fallback || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const chars = Array.from(cleaned); // 按 Unicode 码点，避免截断 emoji/代理对
+    return chars.length <= 80 ? cleaned : chars.slice(0, 80).join('');
+  }
+
+  /** 仅下载音频轨（DASH 音频即 AAC fMP4，可直接存为 .m4a） */
+  async function getAudioStream(aid, cid) {
+    const dash = await apiGet(
+      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=127&fnval=16&fourk=1&platform=pc`
+    );
+    const audio = (dash.dash?.audio || []).sort((a, b) => b.id - a.id)[0]
+      || dash.dash?.flac?.[0];
+    if (!audio) throw new Error('该视频无独立音频轨');
+    return {
+      urls: extractStreamUrls(audio),
+      id: audio.id,
+      codecs: audio.codecs || ''
+    };
+  }
+
+  async function handleAudioOnly(aid, cid, title, jobId) {
+    const session = createSession(jobId);
+    try {
+      const base = safeFilename(title, 'audio');
+      const stream = await getAudioStream(aid, cid);
+      if (!stream.urls.length) throw new Error('无法解析音频 CDN 地址');
+      const sniffed = sniffPlayingUrls();
+      const preferHost = hostFromUrl(sniffed.audio || sniffed.video);
+      sendProgress(session, 'audio', 0);
+      const blob = await pageDownload(session, stream.urls, (p) => {
+        sendProgress(session, 'audio', p.percent, { received: p.received, total: p.total });
+      }, preferHost, 'audio');
+      sendProgress(session, 'save', 100);
+      saveBlob(blob, base + '.m4a');
+      return { audioOnly: true, filename: base + '.m4a', jobId: session.jobId };
+    } finally {
+      destroySession(session.jobId);
+    }
+  }
+
+  /** 音频模式体积预估（仅音频轨带宽） */
+  async function estimateAudioSize(aid, cid, durationSec) {
+    const dur = Math.max(Number(durationSec) || 0, 1);
+    try {
+      const dash = await apiGet(
+        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=127&fnval=16&fourk=1&platform=pc`
+      );
+      const audio = (dash.dash?.audio || []).sort((a, b) => b.id - a.id)[0]
+        || dash.dash?.flac?.[0];
+      if (audio?.bandwidth) {
+        const bytes = Math.round((audio.bandwidth * dur) / 8);
+        return { sizeBytes: bytes, sizeLabel: formatSize(bytes), estimateNote: '约数，仅供参考' };
+      }
+    } catch { /* ignore */ }
+    return { sizeBytes: 0, sizeLabel: '未知', estimateNote: null };
+  }
+
   /** 从页面已播放的资源中嗅探 CDN 地址（兜底） */
   function sniffPlayingUrls() {
     const entries = performance.getEntriesByType('resource') || [];
@@ -472,35 +530,59 @@
     try { return new URL(url).hostname; } catch { return null; }
   }
 
-  const dlCtrl = {
-    paused: false,
-    cancelled: false,
-    abortController: null,
-    controllers: {},
-    trackProgress: {},
-    pauseWait: null,
-    lastProgress: null
-  };
+  /** 并行任务：每个 jobId 独立 session（暂停/取消互不影响） */
+  const sessions = new Map();
+  let jobSeq = 0;
 
-  function initDownloadControl() {
-    dlCtrl.paused = false;
-    dlCtrl.cancelled = false;
-    dlCtrl.abortController = null;
-    dlCtrl.controllers = {};
-    dlCtrl.trackProgress = {};
-    dlCtrl.pauseWait = null;
-    dlCtrl.lastProgress = null;
+  function createSession(jobId) {
+    const id = jobId || `job-${Date.now()}-${++jobSeq}`;
+    const session = {
+      jobId: id,
+      paused: false,
+      cancelled: false,
+      abortController: null,
+      controllers: {},
+      trackProgress: {},
+      pauseWait: null,
+      lastProgress: null
+    };
+    sessions.set(id, session);
+    return session;
   }
 
-  function abortAllControllers() {
-    Object.values(dlCtrl.controllers).forEach((c) => c?.abort());
-    dlCtrl.abortController?.abort();
+  function destroySession(jobId) {
+    const s = sessions.get(jobId);
+    if (!s) return;
+    Object.values(s.controllers).forEach((c) => c?.abort());
+    s.abortController?.abort();
+    sessions.delete(jobId);
   }
 
-  function combineTrackProgress() {
+  function abortSessionControllers(session) {
+    Object.values(session.controllers).forEach((c) => c?.abort());
+    session.abortController?.abort();
+  }
+
+  function getDisplayProgress(session) {
+    const vp = session.trackProgress.video;
+    if (vp?.total && vp.received < vp.total) {
+      return {
+        received: vp.received,
+        total: vp.total,
+        percent: Math.round((vp.received / vp.total) * 100)
+      };
+    }
+    const ap = session.trackProgress.audio;
+    if (ap) {
+      return {
+        received: ap.received || 0,
+        total: ap.total || 0,
+        percent: ap.total ? Math.round((ap.received / ap.total) * 100) : 0
+      };
+    }
     let received = 0;
     let total = 0;
-    for (const p of Object.values(dlCtrl.trackProgress)) {
+    for (const p of Object.values(session.trackProgress)) {
       received += p.received || 0;
       total += p.total || 0;
     }
@@ -511,62 +593,51 @@
     };
   }
 
-  function getDisplayProgress() {
-    const vp = dlCtrl.trackProgress.video;
-    if (vp?.total && vp.received < vp.total) {
-      return {
-        received: vp.received,
-        total: vp.total,
-        percent: Math.round((vp.received / vp.total) * 100)
-      };
-    }
-    const ap = dlCtrl.trackProgress.audio;
-    if (ap) {
-      return {
-        received: ap.received || 0,
-        total: ap.total || 0,
-        percent: ap.total ? Math.round((ap.received / ap.total) * 100) : 0
-      };
-    }
-    return combineTrackProgress();
-  }
-
-  function pauseDownloadControl() {
-    if (dlCtrl.cancelled || dlCtrl.paused) return;
-    dlCtrl.paused = true;
-    const p = getDisplayProgress();
-    sendProgress('paused', p.percent || 0, { received: p.received, total: p.total });
-    abortAllControllers();
-  }
-
-  function resumeDownloadControl() {
-    if (dlCtrl.cancelled || !dlCtrl.paused) return;
-    dlCtrl.paused = false;
-    if (dlCtrl.pauseWait) {
-      dlCtrl.pauseWait.resolve();
-      dlCtrl.pauseWait = null;
+  function pauseDownloadControl(jobId) {
+    const targets = jobId ? [sessions.get(jobId)].filter(Boolean) : [...sessions.values()];
+    for (const session of targets) {
+      if (session.cancelled || session.paused) continue;
+      session.paused = true;
+      const p = getDisplayProgress(session);
+      sendProgress(session, 'paused', p.percent || 0, { received: p.received, total: p.total });
+      abortSessionControllers(session);
     }
   }
 
-  function cancelDownloadControl() {
-    dlCtrl.cancelled = true;
-    dlCtrl.paused = false;
-    if (dlCtrl.pauseWait) {
-      dlCtrl.pauseWait.resolve();
-      dlCtrl.pauseWait = null;
+  function resumeDownloadControl(jobId) {
+    const targets = jobId ? [sessions.get(jobId)].filter(Boolean) : [...sessions.values()];
+    for (const session of targets) {
+      if (session.cancelled || !session.paused) continue;
+      session.paused = false;
+      if (session.pauseWait) {
+        session.pauseWait.resolve();
+        session.pauseWait = null;
+      }
     }
-    abortAllControllers();
   }
 
-  function waitWhilePaused() {
-    if (!dlCtrl.paused || dlCtrl.cancelled) return Promise.resolve();
+  function cancelDownloadControl(jobId) {
+    const targets = jobId ? [sessions.get(jobId)].filter(Boolean) : [...sessions.values()];
+    for (const session of targets) {
+      session.cancelled = true;
+      session.paused = false;
+      if (session.pauseWait) {
+        session.pauseWait.resolve();
+        session.pauseWait = null;
+      }
+      abortSessionControllers(session);
+    }
+  }
+
+  function waitWhilePaused(session) {
+    if (!session.paused || session.cancelled) return Promise.resolve();
     return new Promise((resolve) => {
-      dlCtrl.pauseWait = { resolve };
+      session.pauseWait = { resolve };
     });
   }
 
-  function throwIfCancelled() {
-    if (dlCtrl.cancelled) throw new Error('下载已取消');
+  function throwIfCancelled(session) {
+    if (session.cancelled) throw new Error('下载已取消');
   }
 
   function formatDownloadError(err) {
@@ -590,7 +661,7 @@
     return msg;
   }
 
-  async function pageDownload(urls, onProgress, preferHost, trackId = 'default') {
+  async function pageDownload(session, urls, onProgress, preferHost, trackId = 'default') {
     const list = (Array.isArray(urls) ? urls : [urls]).filter(isDownloadableCdnUrl);
     if (!list.length) throw new Error('无有效 CDN 地址');
 
@@ -612,9 +683,9 @@
         log('下载', '使用 ' + hostFromUrl(working));
 
         while (true) {
-          throwIfCancelled();
-          dlCtrl.abortController = new AbortController();
-          dlCtrl.controllers[trackId] = dlCtrl.abortController;
+          throwIfCancelled(session);
+          session.abortController = new AbortController();
+          session.controllers[trackId] = session.abortController;
           const headers = { Referer: REFERER };
           if (received > 0) headers.Range = `bytes=${received}-`;
 
@@ -625,13 +696,13 @@
               referrer: location.href,
               referrerPolicy: 'strict-origin-when-cross-origin',
               headers,
-              signal: dlCtrl.abortController.signal
+              signal: session.abortController.signal
             });
           } catch (e) {
-            if (dlCtrl.cancelled) throw new Error('下载已取消');
-            if (dlCtrl.paused) {
-              await waitWhilePaused();
-              throwIfCancelled();
+            if (session.cancelled) throw new Error('下载已取消');
+            if (session.paused) {
+              await waitWhilePaused(session);
+              throwIfCancelled(session);
               continue;
             }
             throw e;
@@ -656,13 +727,13 @@
 
           try {
             while (true) {
-              throwIfCancelled();
+              throwIfCancelled(session);
               let readResult;
               try {
                 readResult = await reader.read();
               } catch (e) {
-                if (dlCtrl.cancelled) throw new Error('下载已取消');
-                if (dlCtrl.paused) {
+                if (session.cancelled) throw new Error('下载已取消');
+                if (session.paused) {
                   needResume = true;
                   break;
                 }
@@ -675,8 +746,8 @@
               chunks.push(value);
               received += value.length;
               const progress = { received, total, percent: total ? Math.round((received / total) * 100) : 0 };
-              dlCtrl.trackProgress[trackId] = progress;
-              dlCtrl.lastProgress = progress;
+              session.trackProgress[trackId] = progress;
+              session.lastProgress = progress;
               if (onProgress) onProgress(progress);
             }
           } finally {
@@ -684,8 +755,8 @@
           }
 
           if (needResume) {
-            await waitWhilePaused();
-            throwIfCancelled();
+            await waitWhilePaused(session);
+            throwIfCancelled(session);
             continue;
           }
 
@@ -743,119 +814,125 @@
     return blob;
   }
 
-  function sendProgress(step, percent, extra) {
-    reply(null, { type: 'PROGRESS', step, percent, ...extra });
+  function sendProgress(session, step, percent, extra) {
+    reply(null, {
+      type: 'PROGRESS',
+      jobId: session?.jobId,
+      step,
+      percent,
+      ...extra
+    });
   }
 
-  async function handleDownload(aid, cid, qn, title) {
-    initDownloadControl();
+  async function handleDownload(aid, cid, qn, title, jobId) {
+    const session = createSession(jobId);
     try {
-    const base = (title || 'video').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
-    let streams = await getStreams(aid, cid, qn);
+      const base = safeFilename(title, 'video');
+      let streams = await getStreams(aid, cid, qn);
 
-    if (streams.type === 'durl') {
-      const urls = streams.urls || [];
-      if (!urls.length) throw new Error('无有效 CDN 地址');
+      if (streams.type === 'durl') {
+        const urls = streams.urls || [];
+        if (!urls.length) throw new Error('无有效 CDN 地址');
+        const sniffed = sniffPlayingUrls();
+        const preferHost = hostFromUrl(sniffed.video);
+        sendProgress(session, 'download', 0);
+        const blob = await pageDownload(session, urls, (p) => {
+          sendProgress(session, 'download', p.percent, { received: p.received, total: p.total });
+        }, preferHost);
+        sendProgress(session, 'save', 100);
+        saveBlob(blob, base + '.mp4');
+        return { dash: false, jobId: session.jobId };
+      }
+
       const sniffed = sniffPlayingUrls();
-      const preferHost = hostFromUrl(sniffed.video);
-      sendProgress('download', 0);
-      const blob = await pageDownload(urls, (p) => {
-        sendProgress('download', p.percent, { received: p.received, total: p.total });
-      }, preferHost);
-      sendProgress('save', 100);
-      saveBlob(blob, base + '.mp4');
-      return { dash: false };
-    }
+      const preferHost = hostFromUrl(sniffed.video || sniffed.audio);
+      let videoUrl = streams.video || sniffed.video;
+      let audioUrl = streams.audio || sniffed.audio;
+      const videoUrls = streams.videoUrls?.length
+        ? streams.videoUrls
+        : [videoUrl, sniffed.video].filter(Boolean);
+      const audioUrls = streams.audioUrls?.length
+        ? streams.audioUrls
+        : [audioUrl, sniffed.audio].filter(Boolean);
 
-    const sniffed = sniffPlayingUrls();
-    const preferHost = hostFromUrl(sniffed.video || sniffed.audio);
-    let videoUrl = streams.video || sniffed.video;
-    let audioUrl = streams.audio || sniffed.audio;
-    const videoUrls = streams.videoUrls?.length
-      ? streams.videoUrls
-      : [videoUrl, sniffed.video].filter(Boolean);
-    const audioUrls = streams.audioUrls?.length
-      ? streams.audioUrls
-      : [audioUrl, sniffed.audio].filter(Boolean);
+      if (!videoUrl) throw new Error('无视频流，请先点击播放视频再下载');
+      if (preferHost) log('步骤3', '嗅探到播放节点 ' + preferHost);
 
-    if (!videoUrl) throw new Error('无视频流，请先点击播放视频再下载');
-    if (preferHost) log('步骤3', '嗅探到播放节点 ' + preferHost);
+      const vTrack = { received: 0, total: 0, done: false };
+      const aTrack = { received: 0, total: 0, done: false };
+      const hasAudio = audioUrls.length > 0;
 
-    const vTrack = { received: 0, total: 0, done: false };
-    const aTrack = { received: 0, total: 0, done: false };
-    const hasAudio = audioUrls.length > 0;
+      function sendDashProgress() {
+        const vPct = vTrack.total
+          ? Math.min(100, Math.round((vTrack.received / vTrack.total) * 100))
+          : 0;
 
-    /** 并行下载，但 UI 分阶段：先视频流，视频完成后再显示音频流 */
-    function sendDashProgress() {
-      const vPct = vTrack.total
-        ? Math.min(100, Math.round((vTrack.received / vTrack.total) * 100))
-        : 0;
-
-      if (!vTrack.done) {
-        sendProgress('video', vPct, { received: vTrack.received, total: vTrack.total });
-        return;
+        if (!vTrack.done) {
+          sendProgress(session, 'video', vPct, { received: vTrack.received, total: vTrack.total });
+          return;
+        }
+        if (hasAudio) {
+          const aPct = aTrack.total
+            ? Math.min(100, Math.round((aTrack.received / aTrack.total) * 100))
+            : (aTrack.done ? 100 : 0);
+          sendProgress(session, 'audio', aPct, { received: aTrack.received, total: aTrack.total });
+        }
       }
-      if (hasAudio) {
-        const aPct = aTrack.total
-          ? Math.min(100, Math.round((aTrack.received / aTrack.total) * 100))
-          : (aTrack.done ? 100 : 0);
-        sendProgress('audio', aPct, { received: aTrack.received, total: aTrack.total });
+
+      sendProgress(session, 'video', 0);
+
+      const videoPromise = pageDownload(session, videoUrls, (p) => {
+        Object.assign(vTrack, p);
+        sendDashProgress();
+      }, preferHost, 'video').then((blob) => {
+        vTrack.done = true;
+        sendDashProgress();
+        return blob;
+      });
+
+      const audioPromise = hasAudio
+        ? pageDownload(session, audioUrls, (p) => {
+            Object.assign(aTrack, p);
+            if (vTrack.done) sendDashProgress();
+          }, preferHost, 'audio').then((blob) => {
+            aTrack.done = true;
+            if (vTrack.done) sendDashProgress();
+            return blob;
+          }).catch((e) => {
+            if (e.message === '下载已取消') throw e;
+            log('下载', '音频下载失败: ' + e.message);
+            return null;
+          })
+        : Promise.resolve(null);
+
+      const [vBlob, aBlobRaw] = await Promise.all([videoPromise, audioPromise]);
+      log('下载', `视频轨 ${(vBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+      let aBlob = aBlobRaw;
+      if (aBlob && aBlob.size < 1024) {
+        log('下载', '音频流为空');
+        aBlob = null;
+      } else if (aBlob) {
+        log('下载', `音频轨 ${(aBlob.size / 1024 / 1024).toFixed(1)}MB`);
       }
-    }
 
-    sendProgress('video', 0);
+      if (aBlob) {
+        const mergeBytes = vBlob.size + aBlob.size;
+        sendProgress(session, 'merge', 0, { received: mergeBytes, total: mergeBytes });
+        const mp4Blob = await mergeM4sInPage(vBlob, aBlob);
+        sendProgress(session, 'save', 100);
+        return {
+          merged: true,
+          filename: base + '.mp4',
+          blob: mp4Blob,
+          jobId: session.jobId
+        };
+      }
 
-    const videoPromise = pageDownload(videoUrls, (p) => {
-      Object.assign(vTrack, p);
-      sendDashProgress();
-    }, preferHost, 'video').then((blob) => {
-      vTrack.done = true;
-      sendDashProgress();
-      return blob;
-    });
-
-    const audioPromise = hasAudio
-      ? pageDownload(audioUrls, (p) => {
-          Object.assign(aTrack, p);
-          if (vTrack.done) sendDashProgress();
-        }, preferHost, 'audio').then((blob) => {
-          aTrack.done = true;
-          if (vTrack.done) sendDashProgress();
-          return blob;
-        }).catch((e) => {
-          if (e.message === '下载已取消') throw e;
-          log('下载', '音频下载失败: ' + e.message);
-          return null;
-        })
-      : Promise.resolve(null);
-
-    const [vBlob, aBlobRaw] = await Promise.all([videoPromise, audioPromise]);
-    log('下载', `视频轨 ${(vBlob.size / 1024 / 1024).toFixed(1)}MB`);
-
-    let aBlob = aBlobRaw;
-    if (aBlob && aBlob.size < 1024) {
-      log('下载', '音频流为空');
-      aBlob = null;
-    } else if (aBlob) {
-      log('下载', `音频轨 ${(aBlob.size / 1024 / 1024).toFixed(1)}MB`);
-    }
-
-    if (aBlob) {
-      const mergeBytes = vBlob.size + aBlob.size;
-      sendProgress('merge', 0, { received: mergeBytes, total: mergeBytes });
-      const mp4Blob = await mergeM4sInPage(vBlob, aBlob);
-      sendProgress('save', 100);
-      return {
-        merged: true,
-        filename: base + '.mp4',
-        blob: mp4Blob
-      };
-    }
-
-    saveBlob(vBlob, base + '_video.m4s');
-    return { dash: true, videoOnly: true };
+      saveBlob(vBlob, base + '_video.m4s');
+      return { dash: true, videoOnly: true, jobId: session.jobId };
     } finally {
-      initDownloadControl();
+      destroySession(session.jobId);
     }
   }
 
@@ -877,27 +954,32 @@
         case 'GET_ESTIMATE':
           reply(id, {
             type: 'OK',
-            data: await estimateDownloadSize(
-              e.data.aid,
-              e.data.cid,
-              e.data.qn,
-              e.data.duration
-            )
+            data: e.data.audioOnly
+              ? await estimateAudioSize(e.data.aid, e.data.cid, e.data.duration)
+              : await estimateDownloadSize(
+                  e.data.aid,
+                  e.data.cid,
+                  e.data.qn,
+                  e.data.duration
+                )
           });
           break;
         case 'START_DOWNLOAD': {
-          const result = await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title);
+          const jobId = e.data.jobId || null;
+          const result = e.data.audioOnly
+            ? await handleAudioOnly(e.data.aid, e.data.cid, e.data.title, jobId)
+            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId);
           reply(id, { type: 'OK', data: result });
           break;
         }
         case 'PAUSE_DOWNLOAD':
-          pauseDownloadControl();
+          pauseDownloadControl(e.data.jobId || null);
           break;
         case 'RESUME_DOWNLOAD':
-          resumeDownloadControl();
+          resumeDownloadControl(e.data.jobId || null);
           break;
         case 'CANCEL_DOWNLOAD':
-          cancelDownloadControl();
+          cancelDownloadControl(e.data.jobId || null);
           break;
         default:
           reply(id, { type: 'ERR', error: '未知请求: ' + type });

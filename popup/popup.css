@@ -649,3 +649,119 @@ body {
   border-color: rgba(52, 211, 153, 0.35);
   color: var(--bdl-success-text);
 }
+
+/* ===== 下载历史（popup） ===== */
+.popup-history-section {
+  border-top: 1px solid var(--bdl-border);
+  background: var(--bdl-bg);
+}
+
+.popup-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--bdl-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.popup-history-toggle:hover {
+  color: var(--bdl-accent);
+  background: var(--bdl-accent-soft);
+}
+
+.popup-history-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
+  font-size: 10px;
+}
+
+.popup-history-panel {
+  padding: 0 12px 10px;
+}
+
+.popup-history-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--bdl-border);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+}
+
+.popup-history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bdl-border);
+}
+
+.popup-history-item:last-child {
+  border-bottom: none;
+}
+
+.popup-history-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.popup-history-item-title {
+  font-size: 12px;
+  color: var(--bdl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popup-history-item-meta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--bdl-text-muted);
+}
+
+.popup-history-open {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bdl-accent-soft);
+  border: 1px solid var(--bdl-border);
+  color: var(--bdl-accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.popup-history-open:hover {
+  background: var(--bdl-accent-soft);
+  border-color: var(--bdl-accent);
+}
+
+.popup-history-empty {
+  padding: 16px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--bdl-text-muted);
+}
+
+.popup-history-clear {
+  display: block;
+  margin: 8px auto 0;
+  padding: 4px 12px;
+  border: none;
+  background: none;
+  color: var(--bdl-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.popup-history-clear:hover {
+  color: var(--bdl-accent);
+}
