@@ -2,7 +2,7 @@
 
 > **商店状态（2026-08-02）：** 准备提交 **v1.0.2**（并行下载 + 独立进度卡 + 拖拽修复等）。  
 > Product ID：`f2db821e-8942-4cc6-99d1-509775796785` · Store ID：`0RDCKF6C35QD`  
-> 直链：https://microsoftedge.microsoft.com/addons/detail/fdcimmafpnpkehegehnjjklloqfjmem  
+> 直链：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem  
 
 ## 本次发版 1.0.2（按序做）
 
@@ -152,7 +152,7 @@ B站视频下载助手：在哔哩哔哩（bilibili.com）普通视频页下载 
 4. 若失败：先播放 2～3 秒再重试
 
 说明：仅供个人学习；不破解会员、不绕过付费；不支持合集批量。
-反馈：hangdudu@agent.qq.com
+反馈：hangdudu0@agent.qq.com
 FAQ：https://snowflake-hangdudu.github.io/bili-downloader/faq.html
 ```
 
@@ -183,7 +183,7 @@ How to test:
 3. Select 720P or lower → Start download
 
 Personal learning only. Does not unlock VIP or paid content. Does not batch-download seasons (ugc_season).
-Contact: hangdudu@agent.qq.com
+Contact: hangdudu0@agent.qq.com
 FAQ: https://snowflake-hangdudu.github.io/bili-downloader/faq.html
 ```
 
@@ -197,7 +197,27 @@ bilibili, bilibili download, bilibili mp4, download bilibili video, b站, bilibi
 
 **位置：** Partner Center → Store listings → 中文 / English → **更新说明 / What's new** → 保存。
 
-#### 1.0.2（本次发版 — 优先粘贴）
+#### 1.0.3（本次发版 — 优先粘贴）
+
+中文：
+
+```
+1.0.3 更新：
+• 下载成功后引导商店评分（满 3 次再提示；可下次再说/不再提示）
+• 面板底栏精简；非视频页与并行提示体验优化
+• Firefox 打包与跨浏览器兼容（browser/chrome API）
+```
+
+英文：
+
+```
+1.0.3:
+• Optional store-rating prompt after 3 successful downloads
+• Cleaner panel footer; clearer non-video and parallel tips
+• Firefox packaging and browser/chrome API compatibility
+```
+
+#### 1.0.2
 
 中文：
 
@@ -295,7 +315,7 @@ Scope / compliance:
 - Does NOT unlock VIP, paid bangumi, or bypass login/payment.
 - Privacy policy: https://snowflake-hangdudu.github.io/bili-downloader/
 - FAQ: https://snowflake-hangdudu.github.io/bili-downloader/faq.html
-- Publisher contact (China): hangdudu@agent.qq.com
+- Publisher contact (China): hangdudu0@agent.qq.com
 
 Resubmission note (2026-07): Previous review failed with 1.1.3 because primary functions were not usable. Likely cause: testing on non-video pages and/or bilibili.com unreachable outside China. Please follow steps 1–6 above.
 ```

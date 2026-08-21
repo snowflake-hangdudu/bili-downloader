@@ -1,8 +1,21 @@
-const VERSION = chrome.runtime.getManifest().version;
-const FEEDBACK_QQ = 'hangdudu@agent.qq.com';
+const EXT = typeof browser !== 'undefined' ? browser : chrome;
+const VERSION = EXT.runtime.getManifest().version;
 document.getElementById('app-version').textContent = 'v' + VERSION;
 
 const $ = (id) => document.getElementById(id);
+
+function clearNode(node) {
+  node.replaceChildren();
+}
+
+function appendDiv(parent, className, text, title) {
+  const el = document.createElement('div');
+  el.className = className;
+  el.textContent = text;
+  if (title) el.title = title;
+  parent.appendChild(el);
+  return el;
+}
 
 function formatView(n) {
   const v = Number(n) || 0;
@@ -69,7 +82,7 @@ function pruneHistoryItems(items) {
 
 async function loadHistory() {
   try {
-    const { [HISTORY_KEY]: items } = await chrome.storage.local.get(HISTORY_KEY);
+    const { [HISTORY_KEY]: items } = await EXT.storage.local.get(HISTORY_KEY);
     return pruneHistoryItems(items);
   } catch {
     return [];
@@ -101,38 +114,38 @@ async function openHistoryEntry(entry) {
   const url = historyEntryUrl(entry);
   if (!url) return;
 
-  await chrome.storage.local.set({ biliDlAutoOpen: 1 });
+  await EXT.storage.local.set({ biliDlAutoOpen: 1 });
 
-  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [active] = await EXT.tabs.query({ active: true, currentWindow: true });
   if (active?.id && isBiliVideoUrl(active.url)) {
     try {
-      await chrome.scripting.executeScript({
+      await EXT.scripting.executeScript({
         target: { tabId: active.id },
         func: () => {
           try { sessionStorage.setItem('biliDlAutoOpen', '1'); } catch { /* ignore */ }
         }
       });
     } catch { /* ignore */ }
-    await chrome.tabs.update(active.id, { url });
+    await EXT.tabs.update(active.id, { url });
     window.close();
     return;
   }
 
   if (active?.id && active.url && /bilibili\.com/i.test(active.url)) {
     try {
-      await chrome.scripting.executeScript({
+      await EXT.scripting.executeScript({
         target: { tabId: active.id },
         func: () => {
           try { sessionStorage.setItem('biliDlAutoOpen', '1'); } catch { /* ignore */ }
         }
       });
     } catch { /* ignore */ }
-    await chrome.tabs.update(active.id, { url });
+    await EXT.tabs.update(active.id, { url });
     window.close();
     return;
   }
 
-  await chrome.tabs.create({ url });
+  await EXT.tabs.create({ url });
   window.close();
 }
 
@@ -145,31 +158,39 @@ async function renderPopupHistory() {
     countEl.textContent = items.length;
     countEl.classList.remove('hidden');
     clearEl.classList.remove('hidden');
-    listEl.innerHTML = items.map((h, i) => {
-      const url = historyEntryUrl(h);
-      const link = url
-        ? `<button type="button" class="popup-history-open" data-idx="${i}">打开</button>`
-        : '';
-      return `
-        <div class="popup-history-item">
-          <div class="popup-history-item-main">
-            <div class="popup-history-item-title" title="${(h.title || '').replace(/"/g, '&quot;')}">${h.title || '未命名'}</div>
-            <div class="popup-history-item-meta">${formatHistoryTime(h.ts)} · ${h.label || ''}${h.format === 'm4a' ? ' · M4A' : ''}${h.fileSize ? ' · ' + formatBytes(h.fileSize) : ''}</div>
-          </div>
-          ${link}
-        </div>`;
-    }).join('');
-    listEl.querySelectorAll('.popup-history-open').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const idx = Number(btn.dataset.idx);
-        const entry = items[idx];
-        if (entry) await openHistoryEntry(entry);
-      });
+    clearNode(listEl);
+    const frag = document.createDocumentFragment();
+    items.forEach((h, i) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'popup-history-item';
+      const mainEl = document.createElement('div');
+      mainEl.className = 'popup-history-item-main';
+      itemEl.appendChild(mainEl);
+      appendDiv(mainEl, 'popup-history-item-title', h.title || '未命名', h.title || '未命名');
+      appendDiv(
+        mainEl,
+        'popup-history-item-meta',
+        `${formatHistoryTime(h.ts)} · ${h.label || ''}${h.format === 'm4a' ? ' · M4A' : ''}${h.fileSize ? ' · ' + formatBytes(h.fileSize) : ''}`
+      );
+      if (historyEntryUrl(h)) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'popup-history-open';
+        btn.textContent = '打开';
+        btn.addEventListener('click', async () => {
+          const entry = items[i];
+          if (entry) await openHistoryEntry(entry);
+        });
+        itemEl.appendChild(btn);
+      }
+      frag.appendChild(itemEl);
     });
+    listEl.appendChild(frag);
   } else {
     countEl.classList.add('hidden');
     clearEl.classList.add('hidden');
-    listEl.innerHTML = '<div class="popup-history-empty">暂无下载记录</div>';
+    clearNode(listEl);
+    appendDiv(listEl, 'popup-history-empty', '暂无下载记录');
   }
 }
 
@@ -202,7 +223,7 @@ function readPageState() {
 }
 
 async function fallbackFromPage(tabId) {
-  const [{ result }] = await chrome.scripting.executeScript({
+  const [{ result }] = await EXT.scripting.executeScript({
     target: { tabId },
     func: readPageState
   });
@@ -248,31 +269,37 @@ function renderVideo(data) {
   const pagesEl = $('video-pages');
   if (info.pages?.length > 1 && info.pages.every((p) => p && p.cid)) {
     pagesEl.classList.remove('hidden');
-    pagesEl.innerHTML = info.pages
-      .map((p) => `<span class="popup-page-tag">P${p.page}${p.part ? ' ' + p.part : ''}</span>`)
-      .join('');
+    clearNode(pagesEl);
+    const frag = document.createDocumentFragment();
+    info.pages.forEach((p) => {
+      const el = document.createElement('span');
+      el.className = 'popup-page-tag';
+      el.textContent = `P${p.page}${p.part ? ' ' + p.part : ''}`;
+      frag.appendChild(el);
+    });
+    pagesEl.appendChild(frag);
   } else {
     pagesEl.classList.add('hidden');
+    clearNode(pagesEl);
   }
 
   const tagsEl = $('quality-tags');
   if (qualities.length) {
-    tagsEl.innerHTML = qualities.map((q, i) =>
-      `<span class="popup-q-tag${i === 0 ? ' best' : ''}">${q.label}</span>`
-    ).join('');
+    clearNode(tagsEl);
+    const frag = document.createDocumentFragment();
+    qualities.forEach((q, i) => {
+      const el = document.createElement('span');
+      el.className = `popup-q-tag${i === 0 ? ' best' : ''}`;
+      el.textContent = q.label;
+      frag.appendChild(el);
+    });
+    tagsEl.appendChild(frag);
   } else {
-    tagsEl.innerHTML = '<span class="popup-q-tag">暂无可用清晰度</span>';
-  }
-
-  $('max-quality').textContent = data.maxLabel ? `源最高 ${data.maxLabel}` : '源最高 —';
-
-  const loginHintEl = $('login-hint');
-  if (data.loginHint) {
-    loginHintEl.textContent = data.loginHint;
-    loginHintEl.classList.remove('hidden');
-  } else {
-    loginHintEl.textContent = '';
-    loginHintEl.classList.add('hidden');
+    clearNode(tagsEl);
+    const el = document.createElement('span');
+    el.className = 'popup-q-tag';
+    el.textContent = '暂无可用清晰度';
+    tagsEl.appendChild(el);
   }
 
   $('btn-open-panel').disabled = !qualities.length;
@@ -281,7 +308,7 @@ function renderVideo(data) {
 async function init() {
   showState('state-loading');
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await EXT.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url || !isBiliVideoUrl(tab.url)) {
     showEmptyState(tab);
     return;
@@ -290,7 +317,7 @@ async function init() {
   let tabId = tab.id;
 
   try {
-    const resp = await chrome.tabs.sendMessage(tabId, { type: 'BILI_DL_GET_INFO' });
+    const resp = await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_GET_INFO' });
     if (resp?.ok) {
       renderVideo(resp.data);
       showState('state-video');
@@ -313,7 +340,11 @@ async function init() {
           qualities: [],
           maxLabel: ''
         });
-        $('quality-tags').innerHTML = '<span class="popup-q-tag">请刷新页面后重试</span>';
+        clearNode($('quality-tags'));
+        const retryTag = document.createElement('span');
+        retryTag.className = 'popup-q-tag';
+        retryTag.textContent = '请刷新页面后重试';
+        $('quality-tags').appendChild(retryTag);
         $('btn-open-panel').disabled = false;
         showState('state-video');
       } else {
@@ -327,7 +358,7 @@ async function init() {
 
   $('btn-open-panel')?.addEventListener('click', async () => {
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'BILI_DL_OPEN_PANEL' });
+      await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_OPEN_PANEL' });
       window.close();
     } catch {
       $('error-text').textContent = '无法打开面板，请刷新视频页';
@@ -338,7 +369,7 @@ async function init() {
   $('btn-retry')?.addEventListener('click', async () => {
     if (!tabId) return;
     try {
-      await chrome.tabs.reload(tabId);
+      await EXT.tabs.reload(tabId);
       window.close();
     } catch {
       $('error-text').textContent = '无法刷新页面，请手动 F5';
@@ -357,22 +388,8 @@ document.getElementById('popup-history-toggle')?.addEventListener('click', async
 });
 
 document.getElementById('popup-history-clear')?.addEventListener('click', async () => {
-  await chrome.storage.local.set({ [HISTORY_KEY]: [] });
+  await EXT.storage.local.set({ [HISTORY_KEY]: [] });
   await renderPopupHistory();
 });
 
 renderPopupHistory();
-
-document.getElementById('feedback-qq')?.addEventListener('click', () => {
-  const el = document.getElementById('feedback-qq');
-  navigator.clipboard?.writeText(FEEDBACK_QQ).then(() => {
-    if (!el) return;
-    const old = el.textContent;
-    el.textContent = '邮箱已复制，请通过邮件联系';
-    el.classList.add('copied');
-    setTimeout(() => {
-      el.textContent = old;
-      el.classList.remove('copied');
-    }, 1500);
-  }).catch(() => {});
-});

@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B站视频下载助手 - 小红书首发配图</title>
+  <style>
+    :root {
+      --ink: #0b1e2d;
+      --muted: #547080;
+      --cyan: #08a9d6;
+      --cyan-deep: #007ba7;
+      --aqua: #60e0d1;
+      --cream: #f5f0e5;
+      --paper: #fffdf7;
+      --orange: #ff6a3d;
+      --line: rgba(11, 30, 45, .13);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #d9e1e3; color: var(--ink); }
+    body { font-family: "DengXian", "Microsoft YaHei", sans-serif; }
+
+    .stage {
+      display: grid;
+      grid-template-columns: repeat(2, 1242px);
+      gap: 48px;
+      padding: 48px;
+      width: max-content;
+    }
+
+    .card {
+      position: relative;
+      width: 1242px;
+      height: 1660px;
+      overflow: hidden;
+      background: var(--paper);
+      isolation: isolate;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--cyan-deep);
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 52px;
+      height: 8px;
+      border-radius: 8px;
+      background: var(--orange);
+    }
+
+    h1, h2, p { margin: 0; }
+    h1, h2 { font-family: "STZhongsong", "Microsoft YaHei", serif; }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .brand img {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      box-shadow: 0 10px 28px rgba(8, 81, 108, .18);
+    }
+
+    .page-no {
+      position: absolute;
+      right: 64px;
+      bottom: 54px;
+      font-size: 25px;
+      font-weight: 700;
+      color: rgba(11, 30, 45, .4);
+      letter-spacing: 3px;
+    }
+
+    /* Cover */
+    .cover {
+      background:
+        radial-gradient(circle at 84% 12%, rgba(96, 224, 209, .85), transparent 29%),
+        linear-gradient(148deg, #f8f4e9 0 50%, #e8f8f5 50% 100%);
+      padding: 72px 72px 68px;
+    }
+
+    .cover::before {
+      content: "";
+      position: absolute;
+      width: 720px;
+      height: 720px;
+      right: -260px;
+      top: -250px;
+      border: 86px solid rgba(8, 169, 214, .14);
+      border-radius: 50%;
+      z-index: -1;
+    }
+
+    .cover .topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .live-badge {
+      padding: 15px 26px 13px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      font-size: 26px;
+      font-weight: 800;
+      background: #fff;
+      box-shadow: 7px 7px 0 var(--orange);
+    }
+
+    .cover-copy { margin-top: 190px; position: relative; }
+    .cover h1 {
+      max-width: 970px;
+      font-size: 116px;
+      line-height: 1.04;
+      letter-spacing: -4px;
+    }
+
+    .cover h1 .accent {
+      display: inline-block;
+      color: var(--cyan-deep);
+      position: relative;
+    }
+
+    .cover h1 .accent::after {
+      content: "";
+      position: absolute;
+      left: 2px;
+      right: -8px;
+      bottom: 4px;
+      height: 20px;
+      background: var(--aqua);
+      z-index: -1;
+      transform: rotate(-1.4deg);
+    }
+
+    .cover .sub {
+      margin-top: 62px;
+      max-width: 890px;
+      font-size: 44px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .cover .store-row {
+      display: flex;
+      gap: 18px;
+      margin-top: 76px;
+    }
+
+    .store-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 15px;
+      padding: 21px 28px;
+      border-radius: 18px;
+      color: #fff;
+      background: var(--ink);
+      font-size: 29px;
+      font-weight: 700;
+      box-shadow: 0 18px 38px rgba(11, 30, 45, .18);
+    }
+
+    .store-pill i {
+      display: grid;
+      place-items: center;
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: var(--aqua);
+      color: var(--ink);
+      font-style: normal;
+      font-size: 21px;
+    }
+
+    .cover .promise {
+      position: absolute;
+      left: 72px;
+      right: 72px;
+      bottom: 84px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 2px solid var(--line);
+      padding-top: 34px;
+    }
+
+    .promise span {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      border-right: 2px solid var(--line);
+    }
+    .promise span:last-child { border-right: 0; }
+
+    /* Interface */
+    .interface {
+      padding: 70px 64px;
+      background: #071722;
+      color: #fff;
+    }
+
+    .interface .eyebrow { color: var(--aqua); }
+    .interface h2 {
+      margin-top: 45px;
+      font-size: 76px;
+      line-height: 1.18;
+      max-width: 960px;
+    }
+
+    .screen-frame {
+      position: relative;
+      margin-top: 60px;
+      width: 1114px;
+      height: 696px;
+      overflow: hidden;
+      border-radius: 36px;
+      border: 3px solid rgba(255,255,255,.2);
+      box-shadow: 0 34px 90px rgba(0,0,0,.44);
+      background: #fff;
+    }
+
+    .screen-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .screen-frame::after {
+      content: "真实界面";
+      position: absolute;
+      left: 28px;
+      top: 28px;
+      padding: 12px 20px;
+      background: rgba(7, 23, 34, .82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 999px;
+      font-size: 23px;
+      letter-spacing: 2px;
+    }
+
+    .feature-chips {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 52px;
+    }
+
+    .feature-chips div {
+      min-height: 128px;
+      padding: 28px 30px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 24px;
+      background: rgba(255,255,255,.075);
+      font-size: 30px;
+      line-height: 1.35;
+    }
+
+    .feature-chips b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--aqua);
+      font-size: 24px;
+      letter-spacing: 1px;
+    }
+
+    .interface .page-no { color: rgba(255,255,255,.42); }
+
+    /* Feature list */
+    .features {
+      padding: 72px 68px;
+      background:
+        linear-gradient(rgba(11,30,45,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(11,30,45,.04) 1px, transparent 1px),
+        var(--cream);
+      background-size: 48px 48px;
+    }
+
+    .features h2 {
+      margin-top: 44px;
+      font-size: 80px;
+      line-height: 1.15;
+    }
+
+    .features .lead {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 33px;
+      line-height: 1.5;
+    }
+
+    .feature-list {
+      display: grid;
+      gap: 24px;
+      margin-top: 70px;
+    }
+
+    .feature-item {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      align-items: center;
+      min-height: 232px;
+      padding: 30px 38px 30px 26px;
+      border: 2px solid var(--ink);
+      border-radius: 26px;
+      background: rgba(255, 253, 247, .94);
+      box-shadow: 10px 10px 0 var(--cyan);
+    }
+
+    .feature-item:nth-child(2) { box-shadow-color: var(--aqua); }
+    .feature-item:nth-child(3) { box-shadow-color: var(--orange); }
+    .feature-item:nth-child(4) { box-shadow-color: #ffd05a; }
+
+    .feature-item .num {
+      font-family: "STZhongsong", serif;
+      font-size: 68px;
+      font-weight: 700;
+      color: var(--cyan-deep);
+    }
+
+    .feature-item h3 {
+      margin: 0 0 12px;
+      font-size: 39px;
+      line-height: 1.2;
+    }
+
+    .feature-item p {
+      color: var(--muted);
+      font-size: 29px;
+      line-height: 1.45;
+    }
+
+    /* Steps */
+    .steps {
+      padding: 72px 68px;
+      background:
+        radial-gradient(circle at 12% 88%, rgba(255, 106, 61, .22), transparent 25%),
+        radial-gradient(circle at 88% 5%, rgba(96, 224, 209, .55), transparent 27%),
+        #f8fbf8;
+    }
+
+    .steps h2 {
+      margin-top: 44px;
+      font-size: 82px;
+      line-height: 1.14;
+    }
+
+    .step-list {
+      display: grid;
+      gap: 42px;
+      margin-top: 78px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .step .circle {
+      display: grid;
+      place-items: center;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--ink);
+      font-family: "STZhongsong", serif;
+      font-size: 46px;
+      box-shadow: 8px 8px 0 var(--aqua);
+    }
+
+    .step h3 {
+      margin: 4px 0 12px;
+      font-size: 42px;
+    }
+
+    .step p {
+      color: var(--muted);
+      font-size: 30px;
+      line-height: 1.55;
+    }
+
+    .store-box {
+      margin-top: 76px;
+      padding: 40px 42px;
+      border-radius: 28px;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 16px 16px 0 var(--cyan);
+    }
+
+    .store-box .title {
+      font-size: 36px;
+      font-weight: 800;
+    }
+
+    .store-box p {
+      margin-top: 16px;
+      color: rgba(255,255,255,.72);
+      font-size: 27px;
+      line-height: 1.5;
+    }
+
+    .notice {
+      position: absolute;
+      left: 68px;
+      right: 68px;
+      bottom: 110px;
+      padding-top: 28px;
+      border-top: 2px solid var(--line);
+      color: var(--muted);
+      font-size: 24px;
+      line-height: 1.55;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card cover" id="card-1">
+      <div class="topline">
+        <div class="brand"><img src="../../icons/icon128.png" alt="">B站视频下载助手</div>
+        <div class="live-badge">v1.0.2 已上架</div>
+      </div>
+      <div class="cover-copy">
+        <div class="eyebrow">浏览器扩展</div>
+        <h1>学习资料<br><span class="accent">保存</span>更顺手</h1>
+        <p class="sub">在 B 站普通视频页选择清晰度，保存 MP4 视频或 M4A 音频。</p>
+        <div class="store-row">
+          <div class="store-pill"><i>✓</i>Edge 扩展商店</div>
+          <div class="store-pill"><i>✓</i>Chrome 扩展商店</div>
+        </div>
+      </div>
+      <div class="promise">
+        <span>完全免费</span>
+        <span>本地处理</span>
+        <span>不收集数据</span>
+      </div>
+      <div class="page-no">01 / 04</div>
+    </section>
+
+    <section class="card interface" id="card-2">
+      <div class="eyebrow">不跳转，留在当前页</div>
+      <h2>一个悬浮按钮，<br>把操作放回视频旁边</h2>
+      <div class="screen-frame">
+        <img src="../../store/screenshot-1280x800.png" alt="扩展真实界面">
+      </div>
+      <div class="feature-chips">
+        <div><b>清晰度选择</b>按当前视频实际可用规格展示</div>
+        <div><b>两种格式</b>MP4 视频 / M4A 音频</div>
+        <div><b>并行任务</b>最多 3 路同时处理</div>
+        <div><b>分 P 队列</b>多分 P 内容依次排队</div>
+      </div>
+      <div class="page-no">02 / 04</div>
+    </section>
+
+    <section class="card features" id="card-3">
+      <div class="eyebrow">做得简单，但不简陋</div>
+      <h2>下载之外，<br>这些细节也补齐了</h2>
+      <p class="lead">从开始到完成，尽量不打断原来的浏览节奏。</p>
+      <div class="feature-list">
+        <article class="feature-item">
+          <div class="num">01</div>
+          <div><h3>音视频自动合并</h3><p>分离资源在本地处理，最终保存为常用格式。</p></div>
+        </article>
+        <article class="feature-item">
+          <div class="num">02</div>
+          <div><h3>分 P 队列</h3><p>支持整队取消，失败任务自动重试 1 次。</p></div>
+        </article>
+        <article class="feature-item">
+          <div class="num">03</div>
+          <div><h3>进度随时掌握</h3><p>任务可以暂停、继续或取消，不用盲等。</p></div>
+        </article>
+        <article class="feature-item">
+          <div class="num">04</div>
+          <div><h3>本地下载历史</h3><p>保留最近 50 条记录，方便回看和重新下载。</p></div>
+        </article>
+      </div>
+      <div class="page-no">03 / 04</div>
+    </section>
+
+    <section class="card steps" id="card-4">
+      <div class="eyebrow">3 步开始使用</div>
+      <h2>装好扩展，<br>打开普通视频页</h2>
+      <div class="step-list">
+        <div class="step">
+          <div class="circle">1</div>
+          <div><h3>从浏览器商店安装</h3><p>目前已上架 Microsoft Edge 与 Chrome 扩展商店。</p></div>
+        </div>
+        <div class="step">
+          <div class="circle">2</div>
+          <div><h3>打开 B 站普通视频</h3><p>进入网址中带有 /video/BV… 的视频页面。</p></div>
+        </div>
+        <div class="step">
+          <div class="circle">3</div>
+          <div><h3>点击右下角悬浮按钮</h3><p>选择清晰度与 MP4 / M4A 格式后开始处理。</p></div>
+        </div>
+      </div>
+      <div class="store-box">
+        <div class="title">商店搜索：B站视频下载助手</div>
+        <p>Edge 可直接搜索；Chrome 若未显示，请使用正文中的商店直达链接。</p>
+      </div>
+      <p class="notice">仅用于保存你有权使用的内容及个人学习；不绕过会员、付费内容、DRM 或登录限制。扩展不收集、上传或出售用户数据。</p>
+      <div class="page-no">04 / 04</div>
+    </section>
+  </main>
+</body>
+</html>

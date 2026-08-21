@@ -3,20 +3,49 @@
 
   if (window.__BILI_DL_INIT__) return;
   window.__BILI_DL_INIT__ = true;
+  const EXT = typeof browser !== 'undefined' ? browser : chrome;
 
   const PANEL = 'bili-dl-panel';
   const AGENT = 'bili-dl-agent';
-  const VERSION = chrome.runtime.getManifest().version;
+  const VERSION = EXT.runtime.getManifest().version;
   // 图标资源缓存破坏：换图标后递增 ICON_REV，避免只 F5 仍显示旧图
   const ICON_REV = '26';
-  const ICON_URL = chrome.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
+  const ICON_URL = EXT.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
   const FAQ_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/faq.html';
+  const PRIVACY_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/';
+  const CONTENT_JSON_URL = 'https://download-config-hub.nutmeg-venus-6882.chatgpt.site/api/config/bilibili';
+  const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
+  const DEFAULT_REMOTE_CONTENT = {
+    notice: { enabled: true, title: '公告', updated: '', body: '暂未获取到最新公告，请稍后再试。\n\n下载功能不受影响。' },
+    coop: { enabled: true, title: '开发合作', updated: '', body: '接浏览器插件定制开发。\n\n有合作意向请发邮件。\n邮箱：hangdudu0@agent.qq.com' },
+    rating: { enabled: false, url: '', minSuccess: 3 }
+  };
+  const STORE_RATING_KEY = 'biliDlStoreRating';
+  const STORE_RATING_MIN_SUCCESS = 3;
+  // 文案与 youtube-downloader 保持一致；仅评分状态随版本重置
 
   let muxReadyPromise = null;
 
+  function createFragment(html) {
+    return document.createRange().createContextualFragment(html);
+  }
+
+  function clearNode(node) {
+    node.replaceChildren();
+  }
+
+  function appendTextElement(parent, tagName, className, text, title) {
+    const el = document.createElement(tagName);
+    if (className) el.className = className;
+    el.textContent = text;
+    if (title) el.title = title;
+    parent.appendChild(el);
+    return el;
+  }
+
   function setupMuxInPage() {
     if (muxReadyPromise) return muxReadyPromise;
-    const base = chrome.runtime.getURL('lib/');
+    const base = EXT.runtime.getURL('lib/');
     const loadScript = (file) => new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = base + file;
@@ -112,7 +141,7 @@
 
   async function loadHistory() {
     try {
-      const { [HISTORY_KEY]: items } = await chrome.storage.local.get(HISTORY_KEY);
+      const { [HISTORY_KEY]: items } = await EXT.storage.local.get(HISTORY_KEY);
       return pruneHistoryItems(Array.isArray(items) ? items : []);
     } catch {
       return [];
@@ -131,20 +160,9 @@
       });
       next.unshift(entry);
       next = pruneHistoryItems(next).slice(0, HISTORY_MAX);
-      await chrome.storage.local.set({ [HISTORY_KEY]: next });
+      await EXT.storage.local.set({ [HISTORY_KEY]: next });
       return next;
     } catch { return null; }
-  }
-
-  function historyEntryUrl(entry) {
-    if (!entry?.bvid) return null;
-    return `https://www.bilibili.com/video/${entry.bvid}${entry.pageIndex > 0 ? `?p=${entry.pageIndex + 1}` : ''}`;
-  }
-
-  function formatHistoryTime(ts) {
-    const d = new Date(ts);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   /** B 站 view API：pages.length > 1 且每 P 有 cid 才是真·多 P */
@@ -208,7 +226,7 @@
 
     const panel = document.createElement('div');
     panel.id = 'bili-dl-panel-root';
-    panel.innerHTML = `
+    panel.appendChild(createFragment(`
       <div id="bili-dl-panel">
         <button id="bili-dl-toggle" title="下载视频">
           <img src="${ICON_URL}" alt="">
@@ -222,14 +240,8 @@
             </div>
             <button id="bili-dl-close" aria-label="关闭">&times;</button>
           </div>
+          <div id="bili-dl-home">
           <div class="bili-dl-body">
-            <div class="bili-dl-detect">
-              <span class="bili-dl-dot"></span>
-              <span id="bili-dl-detect-text">识别页面中…</span>
-              <span class="bili-dl-tag">B站 · 详情</span>
-              <span id="bili-dl-ready" class="bili-dl-badge hidden">可用</span>
-            </div>
-
             <div id="bili-dl-video-card" class="bili-dl-video-card">
               <div class="bili-dl-cover-wrap">
                 <div id="bili-dl-cover-sk" class="bili-dl-sk-cover bili-dl-shimmer"></div>
@@ -272,20 +284,10 @@
               </div>
             </div>
 
-            <div class="bili-dl-info-row">
-              <span id="bili-dl-format-tip" class="bili-dl-info-tip">MP4 含画面，M4A 仅声音</span>
-            </div>
-
-            <div class="bili-dl-info-row">
-              <span id="bili-dl-max-label" class="bili-dl-info-tip">源最高 —</span>
-            </div>
-
             <div id="bili-dl-estimate" class="bili-dl-estimate hidden">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               <span id="bili-dl-estimate-text">预计大小 —</span>
             </div>
-
-            <div id="bili-dl-login-hint" class="bili-dl-hint hidden"></div>
 
             <button id="bili-dl-start" class="bili-dl-btn" disabled>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -296,35 +298,43 @@
               <span id="bili-dl-queue-label">队列下载全部分 P</span>
             </button>
             <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
-            <div id="bili-dl-parallel-tip" class="bili-dl-info-tip bili-dl-parallel-tip">最多同时 3 路并行；并行进行中请先完成，再使用分 P 队列</div>
             <div id="bili-dl-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
           </div>
-          <div id="bili-dl-history" class="bili-dl-history hidden">
-            <div class="bili-dl-history-head">
-              <span>下载历史</span>
-              <button id="bili-dl-history-clear" type="button" class="bili-dl-history-clear">清空</button>
+          <div id="bili-dl-store-rating" class="bili-dl-store-rating hidden" role="note" aria-live="polite">
+            <p class="bili-dl-store-rating-title">下载搞定 ⭐ 给个好评呗</p>
+            <p class="bili-dl-store-rating-text">用着顺手的话，去 Edge 商店点个分，对我们很有帮助。当然不评也完全没问题。</p>
+            <button type="button" class="bili-dl-store-rating-primary" data-action="rate">去 Edge 商店评分 ⭐</button>
+            <div class="bili-dl-store-rating-actions">
+              <button type="button" class="bili-dl-store-rating-ghost" data-action="later">下次再说</button>
+              <span class="bili-dl-store-rating-sep" aria-hidden="true">·</span>
+              <button type="button" class="bili-dl-store-rating-ghost" data-action="never">别再问了</button>
             </div>
-            <div id="bili-dl-history-list" class="bili-dl-history-list"></div>
           </div>
           <div class="bili-dl-footer">
-            <span class="bili-dl-footer-text">当前页面 · B站视频详情页</span>
             <div class="bili-dl-footer-links">
               <a class="bili-dl-faq-link" href="${FAQ_URL}" target="_blank" rel="noopener">常见问题</a>
-              <button id="bili-dl-history-btn" type="button" class="bili-dl-history-btn">历史</button>
-              <a class="bili-dl-feedback" href="mailto:hangdudu@agent.qq.com" title="点击复制邮箱，打开邮件客户端写信反馈">反馈邮箱：hangdudu@agent.qq.com</a>
+              <a class="bili-dl-privacy-link" href="${PRIVACY_URL}" target="_blank" rel="noopener">隐私政策</a>
+              <button type="button" class="bili-dl-faq-link" data-sheet="notice">公告</button>
+              <button type="button" class="bili-dl-faq-link" data-sheet="coop">开发合作</button>
+              <a class="bili-dl-feedback" href="mailto:hangdudu0@agent.qq.com?subject=B站视频下载助手反馈">反馈邮箱：hangdudu0@agent.qq.com</a>
             </div>
+          </div>
+          </div>
+          <div id="bili-dl-page" class="bili-dl-page hidden">
+            <button type="button" id="bili-dl-page-back" class="bili-dl-page-back">返回下载</button>
+            <h3 id="bili-dl-info-title" class="bili-dl-page-title"></h3>
+            <p id="bili-dl-info-date" class="bili-dl-info-date hidden"></p>
+            <div id="bili-dl-info-body" class="bili-dl-info-body"></div>
           </div>
         </div>
       </div>
-    `;
+    `));
     document.body.appendChild(panel);
 
     const toggleBtn = panel.querySelector('#bili-dl-toggle');
     const menu = panel.querySelector('#bili-dl-menu');
     const closeBtn = panel.querySelector('#bili-dl-close');
-    const detectText = panel.querySelector('#bili-dl-detect-text');
-    const readyBadge = panel.querySelector('#bili-dl-ready');
     const videoCard = panel.querySelector('#bili-dl-video-card');
     const coverSk = panel.querySelector('#bili-dl-cover-sk');
     const coverImg = panel.querySelector('#bili-dl-cover');
@@ -338,23 +348,189 @@
     const pillsEl = panel.querySelector('#bili-dl-quality-pills');
     const qualitySection = pillsEl?.closest('.bili-dl-section');
     const formatPillsEl = panel.querySelector('#bili-dl-format-pills');
-    const formatTipEl = panel.querySelector('#bili-dl-format-tip');
-    const maxLabelEl = panel.querySelector('#bili-dl-max-label');
     const estimateEl = panel.querySelector('#bili-dl-estimate');
     const estimateText = panel.querySelector('#bili-dl-estimate-text');
-    const loginHintEl = panel.querySelector('#bili-dl-login-hint');
     const startBtn = panel.querySelector('#bili-dl-start');
     const queueBtn = panel.querySelector('#bili-dl-queue-all');
     const queueCancelBtn = panel.querySelector('#bili-dl-queue-cancel');
     const queueLabelEl = panel.querySelector('#bili-dl-queue-label');
-    const parallelTipEl = panel.querySelector('#bili-dl-parallel-tip');
     const jobListEl = panel.querySelector('#bili-dl-job-list');
     const statusEl = panel.querySelector('#bili-dl-status');
-    const btnDefaultHtml = startBtn.innerHTML;
-    const historyEl = panel.querySelector('#bili-dl-history');
-    const historyListEl = panel.querySelector('#bili-dl-history-list');
-    const historyBtn = panel.querySelector('#bili-dl-history-btn');
-    const historyClearBtn = panel.querySelector('#bili-dl-history-clear');
+    const storeRatingEl = panel.querySelector('#bili-dl-store-rating');
+    const homeEl = panel.querySelector('#bili-dl-home');
+    const pageEl = panel.querySelector('#bili-dl-page');
+    const pageBack = panel.querySelector('#bili-dl-page-back');
+    const infoTitle = panel.querySelector('#bili-dl-info-title');
+    const infoDate = panel.querySelector('#bili-dl-info-date');
+    const infoBody = panel.querySelector('#bili-dl-info-body');
+    const defaultStartBtnNodes = Array.from(startBtn.childNodes).map((node) => node.cloneNode(true));
+
+    function restoreStartButtonContent() {
+      startBtn.replaceChildren(...defaultStartBtnNodes.map((node) => node.cloneNode(true)));
+    }
+
+    let remoteContent = { ...DEFAULT_REMOTE_CONTENT };
+    const toLines = (value) => Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : String(value || '').split(/\n+/).map((item) => item.trim()).filter(Boolean);
+    function fillPlainBody(el, text) { clearNode(el); toLines(text).forEach((line) => appendTextElement(el, 'p', '', line)); }
+    function appendNoticeSection(el, title, value) { const lines = toLines(value); if (!lines.length) return; const section = document.createElement('section'); section.className = 'bili-dl-notice-section'; appendTextElement(section, 'h4', 'bili-dl-notice-section-title', title); const list = document.createElement('ul'); list.className = 'bili-dl-notice-list'; lines.forEach((line) => appendTextElement(list, 'li', '', line)); section.appendChild(list); el.appendChild(section); }
+    function fillNoticeBody(el, notice) { clearNode(el); const roadmap = notice?.roadmap && typeof notice.roadmap === 'object' ? notice.roadmap : {}; const structured = ['pinned', 'recent', 'knownIssues'].some((key) => toLines(notice?.[key]).length) || ['feedback', 'upcoming', 'planned'].some((key) => toLines(roadmap[key]).length); if (!structured) { fillPlainBody(el, notice?.body || '暂无新公告'); return; } appendNoticeSection(el, '置顶说明', notice.pinned); appendNoticeSection(el, '最近更新', notice.recent); appendNoticeSection(el, '已知问题', notice.knownIssues); const plans = [['征集中', roadmap.feedback], ['即将更新', roadmap.upcoming], ['计划中', roadmap.planned]]; if (plans.some(([, value]) => toLines(value).length)) { const section = document.createElement('section'); section.className = 'bili-dl-notice-section'; appendTextElement(section, 'h4', 'bili-dl-notice-section-title', '开发计划'); plans.forEach(([label, value]) => { const lines = toLines(value); if (!lines.length) return; const group = document.createElement('div'); group.className = 'bili-dl-notice-plan'; appendTextElement(group, 'strong', 'bili-dl-notice-plan-label', label); const list = document.createElement('ul'); list.className = 'bili-dl-notice-list'; lines.forEach((line) => appendTextElement(list, 'li', '', line)); group.appendChild(list); section.appendChild(group); }); el.appendChild(section); } }
+    function mergeRemoteContent(data) { return { notice: { ...DEFAULT_REMOTE_CONTENT.notice, ...(data.notice || {}) }, coop: { ...DEFAULT_REMOTE_CONTENT.coop, ...(data.coop || {}) }, rating: { ...DEFAULT_REMOTE_CONTENT.rating, ...(data.rating || {}) } }; }
+    function ratingEnabled() { const rating = remoteContent.rating || {}; return rating.enabled === true && /^https:\/\//i.test(String(rating.url || '')); }
+    function ratingUrl() { return ratingEnabled() ? String(remoteContent.rating.url) : ''; }
+    function ratingMinSuccess() { const n = Number(remoteContent.rating?.minSuccess); return n > 0 ? n : STORE_RATING_MIN_SUCCESS; }
+    function applyRemoteButtons() { panel.querySelectorAll('[data-sheet]').forEach((btn) => { const item = remoteContent[btn.dataset.sheet]; btn.classList.toggle('hidden', item?.enabled === false); }); if (!ratingEnabled()) storeRatingEl?.classList.add('hidden'); }
+    async function loadRemoteContent() { try { const resp = await EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: CONTENT_JSON_URL }); if (resp?.ok && resp.data && typeof resp.data === 'object') { remoteContent = mergeRemoteContent(resp.data); await EXT.storage.local.set({ [CONTENT_CACHE_KEY]: { data: remoteContent } }); applyRemoteButtons(); return remoteContent; } } catch (_) {} try { const cached = await EXT.storage.local.get(CONTENT_CACHE_KEY); remoteContent = cached[CONTENT_CACHE_KEY]?.data ? mergeRemoteContent(cached[CONTENT_CACHE_KEY].data) : mergeRemoteContent({}); } catch (_) { remoteContent = mergeRemoteContent({}); } applyRemoteButtons(); return remoteContent; }
+    function unlockMenuHeight() {
+      menu.style.removeProperty('--bili-dl-sheet-min');
+      menu.style.height = '';
+      menu.style.minHeight = '';
+    }
+    function rememberSheetMinHeight() {
+      // 固定一次高度：子项 flex:1 1 0% 才能出现内部滚动；不要反复改 height
+      const h = Math.round(menu.getBoundingClientRect().height);
+      if (h > 0) {
+        menu.style.setProperty('--bili-dl-sheet-min', h + 'px');
+        menu.style.height = h + 'px';
+      }
+    }
+    function renderInfoSheet(key, item) {
+      const data = item || {};
+      infoTitle.textContent = data.title || (key === 'coop' ? '开发合作' : '公告');
+      infoDate.textContent = data.updated ? '更新：' + data.updated : '';
+      infoDate.classList.toggle('hidden', !data.updated);
+      if (key === 'notice') fillNoticeBody(infoBody, data);
+      else fillPlainBody(infoBody, data.body);
+    }
+    function showHome() {
+      pageEl?.classList.add('hidden');
+      homeEl?.classList.remove('hidden');
+      menu.classList.remove('is-page');
+      unlockMenuHeight();
+    }
+    async function openInfoSheet(key) {
+      // 记住当前高度作 min-height，不锁死 height，长文在页面内滚动，避免裁切与上下抖
+      menu.classList.remove('is-entering');
+      rememberSheetMinHeight();
+      renderInfoSheet(key, remoteContent[key]);
+      homeEl?.classList.add('hidden');
+      pageEl?.classList.remove('hidden');
+      menu.classList.add('is-page');
+      pageEl.scrollTop = 0;
+      await loadRemoteContent();
+      if (!menu.classList.contains('is-page')) return;
+      renderInfoSheet(key, remoteContent[key]);
+    }
+    panel.querySelectorAll('[data-sheet]').forEach((btn) => btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openInfoSheet(btn.dataset.sheet);
+    }));
+    pageBack?.addEventListener('click', showHome);
+    loadRemoteContent();
+
+    // 评分卡片：交互对齐 youtube-downloader；文案/状态随版本重置
+    // 「去评分」后：整个浏览器会话内不再提示（关浏览器再开才可能再出）；不是新开标签就再弹
+    const STORE_RATING_BROWSER_SESSION_KEY = `biliDlStoreRatingBrowserHide_${VERSION}`;
+    let storeRatingHiddenBrowserSession = false;
+
+    async function refreshBrowserSessionHideFlag() {
+      try {
+        if (EXT.storage?.session) {
+          const r = await EXT.storage.session.get(STORE_RATING_BROWSER_SESSION_KEY);
+          storeRatingHiddenBrowserSession = !!r[STORE_RATING_BROWSER_SESSION_KEY];
+          return;
+        }
+      } catch (_) {}
+      storeRatingHiddenBrowserSession = false;
+    }
+
+    async function setBrowserSessionHideFlag(on) {
+      storeRatingHiddenBrowserSession = !!on;
+      try {
+        if (!EXT.storage?.session) return;
+        if (on) {
+          await EXT.storage.session.set({ [STORE_RATING_BROWSER_SESSION_KEY]: 1 });
+        } else {
+          await EXT.storage.session.remove(STORE_RATING_BROWSER_SESSION_KEY);
+        }
+      } catch (_) {}
+    }
+
+    refreshBrowserSessionHideFlag().catch(() => {});
+
+    async function loadStoreRatingState() {
+      try {
+        const r = await EXT.storage.local.get(STORE_RATING_KEY);
+        let s = r[STORE_RATING_KEY];
+        if (!s || typeof s !== 'object' || s.forVersion !== VERSION) {
+          s = { forVersion: VERSION, successCount: 0 };
+          await EXT.storage.local.set({ [STORE_RATING_KEY]: s }).catch(() => {});
+          await setBrowserSessionHideFlag(false);
+        }
+        return s;
+      } catch {
+        return { forVersion: VERSION, successCount: 0 };
+      }
+    }
+
+    async function saveStoreRatingState(patch) {
+      const prev = await loadStoreRatingState();
+      await EXT.storage.local.set({
+        [STORE_RATING_KEY]: { ...prev, forVersion: VERSION, ...patch }
+      }).catch(() => {});
+    }
+
+    function hideStoreRatingBanner() {
+      storeRatingEl?.classList.add('hidden');
+    }
+
+    async function hideStoreRatingForBrowserSession() {
+      await setBrowserSessionHideFlag(true);
+      hideStoreRatingBanner();
+    }
+
+    function showStoreRatingBanner() {
+      if (!storeRatingEl || !ratingEnabled()) return;
+      storeRatingEl.classList.remove('hidden');
+      try {
+        storeRatingEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch (_) {}
+    }
+
+    async function noteDownloadSuccessForRating() {
+      await loadRemoteContent();
+      if (!ratingEnabled() || !storeRatingEl) return;
+      try {
+        const s = await loadStoreRatingState();
+        if (s.neverAsk) return;
+        const successCount = (Number(s.successCount) || 0) + 1;
+        await saveStoreRatingState({ successCount, dismissedUntilNextSuccess: false });
+        if (successCount < ratingMinSuccess()) return;
+        showStoreRatingBanner();
+      } catch (err) {
+        console.warn('[BiliDL] store rating failed', err);
+      }
+    }
+
+    storeRatingEl?.querySelectorAll('[data-action]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const action = btn.dataset.action;
+        if (action === 'rate') {
+          hideStoreRatingBanner();
+          const url = ratingUrl();
+          if (url) window.open(url, '_blank', 'noopener,noreferrer');
+          return;
+        }
+        if (action === 'never') {
+          await saveStoreRatingState({ neverAsk: true });
+          hideStoreRatingBanner();
+          return;
+        }
+        // 下次再说：本次藏起，下次再成功下载还会出现
+        await saveStoreRatingState({ dismissedUntilNextSuccess: true });
+        hideStoreRatingBanner();
+      });
+    });
 
     function setQueueLabel(count) {
       queueLabelEl.textContent = count > 1 ? `队列下载全部 ${count} 个分 P` : '队列下载全部分 P';
@@ -366,17 +542,9 @@
         b.classList.toggle('active', b.dataset.format === fmt);
       });
       const isAudio = fmt === 'm4a';
-      formatTipEl.textContent = isAudio ? 'M4A 仅保存声音，体积更小' : 'MP4 含画面与声音';
       if (qualitySection) qualitySection.classList.toggle('hidden', isAudio);
-      if (isAudio) {
-        maxLabelEl.textContent = '音频 · 最高音质';
-        refreshEstimate();
-      } else {
-        maxLabelEl.textContent = snapMaxLabelCache || '源最高 —';
-        refreshEstimate();
-      }
+      refreshEstimate();
     }
-    let snapMaxLabelCache = '';
 
     debugLog = (step, msg) => console.log('[BiliDL]', step, msg);
 
@@ -390,46 +558,15 @@
       statusEl.classList.remove('hidden', 'success', 'error');
       statusEl.classList.add('error');
       const href = anchor ? `${FAQ_URL}#${anchor}` : FAQ_URL;
-      statusEl.innerHTML = `${text} <a href="${href}" target="_blank" rel="noopener" class="bili-dl-status-link">查看常见问题</a>`;
-    }
-
-    async function renderHistory() {
-      const items = await loadHistory();
-      if (!items.length) {
-        historyListEl.innerHTML = '<div class="bili-dl-history-empty">暂无下载记录</div>';
-        return;
-      }
-      historyListEl.innerHTML = items.map((h, i) => {
-        const url = historyEntryUrl(h);
-        const link = url
-          ? `<a class="bili-dl-history-item-link" href="${url}" data-idx="${i}">打开</a>`
-          : '';
-        return `
-          <div class="bili-dl-history-item" data-idx="${i}">
-            <div class="bili-dl-history-item-main">
-              <div class="bili-dl-history-item-title" title="${(h.title || '').replace(/"/g, '&quot;')}">${h.title || '未命名'}</div>
-              <div class="bili-dl-history-item-meta">${formatHistoryTime(h.ts)} · ${h.label || ''}${h.format === 'm4a' ? ' · M4A' : ''}${h.fileSize ? ' · ' + formatBytes(h.fileSize) : ''}</div>
-            </div>
-            ${link}
-          </div>`;
-      }).join('');
-
-      historyListEl.querySelectorAll('.bili-dl-history-item-link').forEach((a) => {
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          const entry = items[+a.dataset.idx];
-          if (!entry) return;
-          historyEl.classList.add('hidden');
-          try { sessionStorage.setItem('biliDlAutoOpen', '1'); } catch { /* ignore */ }
-          window.location.href = historyEntryUrl(entry);
-        });
-      });
-    }
-
-    async function toggleHistory() {
-      const show = historyEl.classList.contains('hidden');
-      historyEl.classList.toggle('hidden', !show);
-      if (show) await renderHistory();
+      clearNode(statusEl);
+      statusEl.append(document.createTextNode(text + ' '));
+      const link = document.createElement('a');
+      link.href = href;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.className = 'bili-dl-status-link';
+      link.textContent = '查看常见问题';
+      statusEl.appendChild(link);
     }
 
     const STEP_LABELS = {
@@ -450,16 +587,6 @@
       if (v >= 1024) return Math.round(v / 1024) + ' KB';
       if (v > 0) return v + ' B';
       return '0 B';
-    }
-
-    function setLoginHint(text) {
-      if (text) {
-        loginHintEl.textContent = text;
-        loginHintEl.classList.remove('hidden');
-      } else {
-        loginHintEl.textContent = '';
-        loginHintEl.classList.add('hidden');
-      }
     }
 
     async function refreshEstimate() {
@@ -520,17 +647,6 @@
       downloading = activeJobs.size > 0 || queueRunning;
       jobListEl.classList.toggle('hidden', activeJobs.size === 0);
       queueCancelBtn.classList.toggle('hidden', !queueRunning);
-      if (parallelTipEl) {
-        const busy = activeJobs.size > 0 || queueRunning;
-        parallelTipEl.classList.toggle('is-busy', busy);
-        if (queueRunning) {
-          parallelTipEl.textContent = '分 P 队列进行中（最多 3 路）；可点「取消整队」停止后续任务';
-        } else if (activeJobs.size > 0) {
-          parallelTipEl.textContent = `并行下载中 ${activeJobs.size}/${PARALLEL_MAX}；请先完成后再使用分 P 队列`;
-        } else {
-          parallelTipEl.textContent = '最多同时 3 路并行；并行进行中请先完成，再使用分 P 队列';
-        }
-      }
     }
 
     function cancelEntireQueue() {
@@ -546,7 +662,7 @@
     function hideProgress() {
       activeJobs.forEach((j) => j.cardEl?.remove());
       activeJobs.clear();
-      jobListEl.innerHTML = '';
+      clearNode(jobListEl);
       syncJobListVisibility();
     }
 
@@ -554,7 +670,7 @@
       const el = document.createElement('div');
       el.className = 'bili-dl-progress bili-dl-job-card';
       el.dataset.jobId = job.jobId;
-      el.innerHTML = `
+      el.appendChild(createFragment(`
         <div class="bili-dl-progress-meta">
           <span class="bili-dl-progress-title"></span>
           <span class="bili-dl-progress-q"></span>
@@ -570,7 +686,7 @@
           <button type="button" class="bili-dl-action-btn bili-dl-job-pause">暂停</button>
           <button type="button" class="bili-dl-action-btn danger bili-dl-job-cancel">取消</button>
         </div>
-      `;
+      `));
       const titleEl = el.querySelector('.bili-dl-progress-title');
       titleEl.textContent = job.info?.title || '视频';
       titleEl.title = job.info?.title || '';
@@ -702,9 +818,8 @@
       }
     };
 
-    function setDetect(text, ready) {
-      detectText.textContent = text;
-      readyBadge.classList.toggle('hidden', !ready);
+    function setDetect(_text, _ready) {
+      // 识别条已移除，保留空函数以免改动过多调用点
     }
 
     function setVideoLoading(loading) {
@@ -720,17 +835,25 @@
 
     function renderQualityPills(list) {
       qualities = list || [];
+      clearNode(pillsEl);
       if (!qualities.length) {
-        pillsEl.innerHTML = '<span class="bili-dl-pill disabled">无可用清晰度</span>';
+        appendTextElement(pillsEl, 'span', 'bili-dl-pill disabled', '无可用清晰度');
         selectedQn = 0;
         return;
       }
       if (!qualities.some((q) => q.qn === selectedQn)) {
         selectedQn = qualities[0].qn;
       }
-      pillsEl.innerHTML = qualities.map((q) =>
-        `<button type="button" class="bili-dl-pill${q.qn === selectedQn ? ' active' : ''}" data-qn="${q.qn}">${q.label}</button>`
-      ).join('');
+      const frag = document.createDocumentFragment();
+      qualities.forEach((q) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `bili-dl-pill${q.qn === selectedQn ? ' active' : ''}`;
+        btn.dataset.qn = String(q.qn);
+        btn.textContent = q.label;
+        frag.appendChild(btn);
+      });
+      pillsEl.appendChild(frag);
       pillsEl.querySelectorAll('.bili-dl-pill[data-qn]').forEach((btn) => {
         btn.onclick = () => {
           selectedQn = +btn.dataset.qn;
@@ -783,11 +906,11 @@
       authorEl.classList.add('hidden');
       subEl.textContent = '';
       estimateEl.classList.add('hidden');
-      loginHintEl.classList.add('hidden');
       queueBtn.classList.add('hidden');
       startBtn.disabled = true;
       statusEl.classList.add('hidden');
-      pillsEl.innerHTML = '<span class="bili-dl-pill loading">加载中</span>';
+      clearNode(pillsEl);
+      appendTextElement(pillsEl, 'span', 'bili-dl-pill loading', '加载中');
 
       try {
         const snap = await fetchSnapshot();
@@ -833,9 +956,17 @@
 
         if (isMultiPartVideo(videoInfo.pages)) {
           pagesEl.classList.remove('hidden');
-          pagesEl.innerHTML = videoInfo.pages
-            .map((p, i) => `<button type="button" class="bili-dl-page-btn${i === pageIndex ? ' active' : ''}" data-index="${i}">P${p.page}</button>`)
-            .join('');
+          clearNode(pagesEl);
+          const frag = document.createDocumentFragment();
+          videoInfo.pages.forEach((p, i) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `bili-dl-page-btn${i === pageIndex ? ' active' : ''}`;
+            btn.dataset.index = String(i);
+            btn.textContent = `P${p.page}`;
+            frag.appendChild(btn);
+          });
+          pagesEl.appendChild(frag);
           pagesEl.querySelectorAll('.bili-dl-page-btn').forEach((btn) => {
             btn.onclick = () => {
               pageIndex = +btn.dataset.index;
@@ -851,15 +982,11 @@
           queueBtn.classList.add('hidden');
         }
 
-        maxLabelEl.textContent = snap.maxLabel ? `源最高 ${snap.maxLabel}` : '源最高 —';
-        snapMaxLabelCache = maxLabelEl.textContent;
         if (selectedFormat === 'm4a') {
-          maxLabelEl.textContent = '音频 · 最高音质';
           if (qualitySection) qualitySection.classList.add('hidden');
         } else {
           if (qualitySection) qualitySection.classList.remove('hidden');
         }
-        setLoginHint(snap.loginHint);
         renderQualityPills(snap.qualities);
         if (snap.qualities.some((q) => q.mode === 'dash')) {
           setupMuxInPage().catch(() => {});
@@ -921,7 +1048,7 @@
         startBtn.textContent = n >= PARALLEL_MAX ? `并行已满 (${n})` : `再下一个 (${n})`;
         queueBtn.disabled = true;
       } else {
-        startBtn.innerHTML = btnDefaultHtml;
+        restoreStartButtonContent();
         queueBtn.disabled = false;
       }
     }
@@ -1019,6 +1146,7 @@
                 ? `已保存 M4A：${job.info.title || ''}`
                 : `已保存 MP4：${job.info.title || ''}`
             );
+            noteDownloadSuccessForRating();
           }
         } catch (err) {
           if (err.message === '下载已取消') {
@@ -1155,6 +1283,7 @@
         showStatus('error', `队列已取消（已完成 ${ok}/${total}）`);
       } else if (fail === 0) {
         showStatus('success', `队列下载完成，共 ${ok} 个分 P`);
+        noteDownloadSuccessForRating();
       } else if (ok === 0) {
         showErrorWithFaq(
           `全部失败（${fail} 个）。先播放视频 2～3 秒，或换 720P 后重试`,
@@ -1168,19 +1297,34 @@
       }
 
       setQueueLabel(total);
-      startBtn.innerHTML = btnDefaultHtml;
+      restoreStartButtonContent();
       startBtn.disabled = !selectedQn || !videoInfo;
       queueBtn.disabled = false;
       refreshStartBtnForParallel();
     }
 
+    function openMenuShell() {
+      menu.classList.remove('hidden');
+      menu.classList.remove('is-entering');
+      void menu.offsetWidth;
+      menu.classList.add('is-entering');
+    }
     toggleBtn.onclick = async () => {
       if (toggleDragged) return; // 拖拽后不触发点击
       isOpen = !isOpen;
-      menu.classList.toggle('hidden', !isOpen);
-      if (isOpen) await loadVideoInfo();
+      if (isOpen) {
+        openMenuShell();
+        await loadVideoInfo();
+      } else {
+        menu.classList.add('hidden');
+        menu.classList.remove('is-entering');
+      }
     };
-    closeBtn.onclick = () => { isOpen = false; menu.classList.add('hidden'); };
+    closeBtn.onclick = () => {
+      isOpen = false;
+      menu.classList.add('hidden');
+      menu.classList.remove('is-entering');
+    };
     startBtn.onclick = startDownload;
     queueBtn.onclick = startQueueDownload;
     queueCancelBtn.onclick = cancelEntireQueue;
@@ -1188,12 +1332,6 @@
     formatPillsEl.querySelectorAll('.bili-dl-pill[data-format]').forEach((btn) => {
       btn.onclick = () => setFormat(btn.dataset.format);
     });
-
-    historyBtn.onclick = toggleHistory;
-    historyClearBtn.onclick = async () => {
-      await chrome.storage.local.set({ [HISTORY_KEY]: [] });
-      await renderHistory();
-    };
 
     // FAB 可拖拽：按住按钮拖动；小位移松开仍算点击打开面板
     // 用 document 级 move/up，并禁用 img 原生拖图（B 站页上 capture 常被抢走）
@@ -1256,7 +1394,7 @@
       if (dragMoved) {
         const r = fabPanel.getBoundingClientRect();
         const p = applyFabPos(r.left, r.top);
-        chrome.storage.local.set({ biliDlFabPos: p }).catch(() => {});
+        EXT.storage.local.set({ biliDlFabPos: p }).catch(() => {});
       }
       // 延后清标记，避免紧随其后的 click 误开面板
       setTimeout(() => { toggleDragged = false; }, 120);
@@ -1290,7 +1428,7 @@
     toggleBtn.addEventListener('dragstart', (e) => e.preventDefault());
 
     // 恢复上次拖拽位置；窗口缩放时夹回可视区
-    chrome.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
+    EXT.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
       if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
         applyFabPos(pos.left, pos.top);
       }
@@ -1304,22 +1442,22 @@
         const top = parseFloat(fabPanel.style.top);
         if (!Number.isFinite(left) || !Number.isFinite(top)) return;
         const p = applyFabPos(left, top);
-        chrome.storage.local.set({ biliDlFabPos: p }).catch(() => {});
+        EXT.storage.local.set({ biliDlFabPos: p }).catch(() => {});
       }, 100);
     });
 
     panel.querySelector('.bili-dl-feedback')?.addEventListener('click', (e) => {
       e.preventDefault();
       const el = e.currentTarget;
-      navigator.clipboard?.writeText('hangdudu@agent.qq.com').catch(() => {});
-      window.location.href = 'mailto:hangdudu@agent.qq.com?subject=B站视频下载助手反馈';
+      navigator.clipboard?.writeText('hangdudu0@agent.qq.com').catch(() => {});
+      window.location.href = 'mailto:hangdudu0@agent.qq.com?subject=B站视频下载助手反馈';
     });
 
     window.__BILI_DL_API__ = {
       fetchSnapshot,
       openPanel: async () => {
         isOpen = true;
-        menu.classList.remove('hidden');
+        openMenuShell();
         await loadVideoInfo();
       }
     };
@@ -1374,9 +1512,9 @@
     } catch { /* ignore */ }
 
     // popup 历史「打开」等跨标签场景用 storage 标记
-    chrome.storage.local.get('biliDlAutoOpen').then(({ biliDlAutoOpen: flag }) => {
+    EXT.storage.local.get('biliDlAutoOpen').then(({ biliDlAutoOpen: flag }) => {
       if (!flag) return;
-      chrome.storage.local.remove('biliDlAutoOpen').catch(() => {});
+      EXT.storage.local.remove('biliDlAutoOpen').catch(() => {});
       autoOpenPanelSoon();
     }).catch(() => {});
   }
@@ -1387,7 +1525,7 @@
   }
   waitAndMount();
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  EXT.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const api = window.__BILI_DL_API__;
     if (!api) {
       sendResponse({ ok: false, error: '页面未就绪，请刷新后重试' });

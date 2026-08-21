@@ -50,6 +50,9 @@
   display: none !important;
 }
 
+#bili-dl-menu.is-page .bili-dl-footer,
+#bili-dl-menu.is-page #bili-dl-store-rating { display: none !important; }
+
 #bili-dl-toggle {
   width: 64px;
   height: 64px;
@@ -95,16 +98,30 @@
   right: 0;
   width: 400px;
   max-width: calc(100vw - 32px);
+  max-height: min(calc(100vh - 200px), 640px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   background: var(--bdl-bg);
   border: 1px solid var(--bdl-border);
   border-radius: var(--bdl-radius);
   box-shadow: var(--bdl-shadow);
   overflow: hidden;
-  animation: bili-dl-slide-up 0.25s ease;
 }
 
 #bili-dl-menu.hidden {
   display: none;
+}
+
+/* 仅首次打开面板播一次入场；公告/合作页禁用 transform，避免跟高度变化叠成抖动 */
+#bili-dl-menu.is-entering:not(.is-page) {
+  animation: bili-dl-slide-up 0.25s ease;
+}
+
+#bili-dl-menu.is-page {
+  animation: none;
+  /* 只保底高度、允许长到 max-height，多余内容在 .bili-dl-page 内滚动 */
+  min-height: var(--bili-dl-sheet-min, 0px);
 }
 
 @keyframes bili-dl-slide-up {
@@ -112,8 +129,19 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+#bili-dl-home {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .bili-dl-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
@@ -725,6 +753,103 @@
   border: 1px solid var(--bdl-border);
 }
 
+.bili-dl-store-rating {
+  flex-shrink: 0;
+  margin: 10px 16px 12px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--bdl-border);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-bg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+  animation: bili-dl-rating-in 0.22s ease;
+}
+
+.bili-dl-store-rating.hidden {
+  display: none;
+  animation: none;
+}
+
+@keyframes bili-dl-rating-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bili-dl-store-rating-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--bdl-text);
+  letter-spacing: 0.01em;
+}
+
+.bili-dl-store-rating-text {
+  margin: 0 0 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--bdl-text-muted);
+}
+
+.bili-dl-store-rating-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border-radius: var(--bdl-radius);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 11px 12px;
+  cursor: pointer;
+  border: 1px solid var(--bdl-accent);
+  background: var(--bdl-accent);
+  color: var(--bdl-accent-contrast);
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.bili-dl-store-rating-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.bili-dl-store-rating-sep {
+  color: var(--bdl-border);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  padding: 0 2px;
+}
+
+.bili-dl-store-rating-ghost {
+  flex: 0 1 auto;
+  min-width: 0;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 12px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--bdl-text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.bili-dl-store-rating-primary:hover {
+  filter: brightness(1.06);
+}
+
+.bili-dl-store-rating-primary:active {
+  transform: scale(0.98);
+}
+
+.bili-dl-store-rating-ghost:hover {
+  color: var(--bdl-text);
+  background: var(--bdl-accent-soft);
+}
+
 .bili-dl-status-link {
   color: var(--bdl-accent);
   font-weight: 600;
@@ -734,48 +859,166 @@
 
 .bili-dl-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--bdl-bg);
+  background: var(--bdl-surface);
   border-top: 1px solid var(--bdl-border);
   font-size: 10px;
   color: var(--bdl-text-muted);
-}
-
-.bili-dl-footer-text {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 .bili-dl-footer-links {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .bili-dl-faq-link,
+.bili-dl-privacy-link,
 .bili-dl-feedback {
-  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  box-sizing: border-box;
+  margin: 0;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--bdl-radius);
   background: var(--bdl-accent-soft);
   border: 1px solid var(--bdl-border);
   color: var(--bdl-accent);
   font-size: 10px;
   font-weight: 600;
+  font-family: inherit;
+  line-height: 1.35;
   text-decoration: none;
+  text-align: left;
+  cursor: pointer;
   transition: background 0.15s;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.bili-dl-feedback:hover,
-.bili-dl-faq-link:hover {
+.bili-dl-faq-link:hover,
+.bili-dl-privacy-link:hover,
+.bili-dl-feedback:hover {
+  background: var(--bdl-bg);
+}
+
+.bili-dl-faq-link,
+.bili-dl-privacy-link {
+  flex: 0 0 auto;
+}
+
+.bili-dl-feedback {
+  flex: 1 1 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bili-dl-page {
+  flex: 1 1 0%;
+  min-height: 0;
+  padding: 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bili-dl-page-back {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--bdl-border);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.bili-dl-page-back::before {
+  content: '←';
+  margin-right: 6px;
+}
+
+.bili-dl-page-back:hover {
   background: var(--bdl-accent-soft);
+  border-color: var(--bdl-text-muted);
+}
+
+.bili-dl-page-title {
+  margin: 0;
+  font-size: 17px;
+  color: var(--bdl-text);
+}
+
+.bili-dl-info-date {
+  margin: 6px 0 0;
+  color: var(--bdl-text-muted);
+  font-size: 11px;
+}
+
+.bili-dl-info-body {
+  margin-top: 10px;
+  color: var(--bdl-text);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.bili-dl-info-body p {
+  margin: 0 0 8px;
+}
+
+.bili-dl-notice-section {
+  margin: 0 0 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 10px;
+  background: var(--bdl-surface);
+}
+
+.bili-dl-notice-section:last-child {
+  margin-bottom: 0;
+}
+
+.bili-dl-notice-section-title {
+  margin: 0 0 7px;
+  font-size: 12px;
+}
+
+.bili-dl-notice-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--bdl-text-muted);
+}
+
+.bili-dl-notice-list li + li {
+  margin-top: 4px;
+}
+
+.bili-dl-notice-plan + .bili-dl-notice-plan {
+  margin-top: 10px;
+}
+
+.bili-dl-notice-plan-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
 }
 
 /* ===== 格式切换 ===== */

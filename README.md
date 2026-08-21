@@ -1,10 +1,10 @@
 # B站视频下载助手
 
-Microsoft Edge / Chrome 浏览器扩展（Manifest V3）。在 B 站普通视频页保存视频为 MP4 / M4A，仅供个人学习使用。
+Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。在 B 站普通视频页保存视频为 MP4 / M4A，仅供个人学习使用。
 
-- 版本：1.0.2
-- 反馈邮箱：hangdudu@agent.qq.com
-- 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmafpnpkehegehnjjklloqfjmem
+- 版本：1.0.4
+- 反馈邮箱：hangdudu0@agent.qq.com
+- 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
 ## 功能概览
 
@@ -41,6 +41,17 @@ Microsoft Edge / Chrome 浏览器扩展（Manifest V3）。在 B 站普通视频
 python scripts/pack.py
 ```
 
-## Edge 上架
+Firefox 发布包：
 
-见 [store/EDGE_SUBMIT.md](store/EDGE_SUBMIT.md)
+```bash
+python scripts/pack_firefox.py
+```
+
+## 商店上架
+
+| 商店 | 文档 |
+|------|------|
+| Microsoft Edge | [store/EDGE_SUBMIT.md](store/EDGE_SUBMIT.md) |
+| Chrome Web Store | [store/CHROME_SUBMIT.md](store/CHROME_SUBMIT.md) |
+| Firefox Add-ons (AMO) | [store/FIREFOX_SUBMIT.md](store/FIREFOX_SUBMIT.md) |
+| 图片资源 | [store/SCREENSHOTS.md](store/SCREENSHOTS.md) |

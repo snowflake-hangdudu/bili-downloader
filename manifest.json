@@ -2,13 +2,14 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://*.bilivideo.com/*",
-    "https://*.bilivideo.cn/*"
+    "https://*.bilivideo.cn/*",
+    "https://download-config-hub.nutmeg-venus-6882.chatgpt.site/*"
   ],
   "background": {
     "service_worker": "background.js"

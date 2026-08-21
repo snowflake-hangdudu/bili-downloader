@@ -1,5 +1,7 @@
 # 构建产物
 bilibili-downloader.zip
+bilibili-downloader-firefox.xpi
+*.xpi
 
 # 测试依赖与产物
 test/node_modules/

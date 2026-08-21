@@ -1,6 +1,6 @@
 # B站视频下载助手 — 开发者文档
 
-> **版本：1.0.2** | Manifest V3 | 更新：2026-08-02  
+> **版本：1.0.2** | Manifest V3 | 更新：2026-08-04  
 > **新开会话请先通读本文 + `manifest.json`。** 读完应能改 bug、加功能、打包、更新商店。  
 > **对外页面（`docs/` 隐私/FAQ）勿写实现细节**，只写用户能操作的说明。
 
@@ -36,6 +36,7 @@
 改下载逻辑   content/page-agent.js
 改版本      manifest.json → version；改 _locales 若改名称描述
 打包        python scripts/pack.py  →  bilibili-downloader.zip
+Firefox包   python scripts/pack_firefox.py  →  bilibili-downloader-firefox.xpi
 本地调试    edge://extensions 加载已解压 → B 站视频页 F5
 ```
 
@@ -59,7 +60,7 @@
 | 分 P | 仅传统 `pages` 多 P；**不做合集（ugc_season）批量**（见 §0） |
 | 下载 UI | **展示进度条**（真实百分比 + 阶段文字）；支持**暂停/继续/取消**；合并阶段隐藏暂停 |
 | 清晰度 | 以 API 返回为准，**过滤虚假 1080P/4K**；低清 durl 接受 `*.bilivideo.com/cn` CDN |
-| 反馈 | 邮箱 `hangdudu@agent.qq.com`，`mailto:` + 复制邮箱 |
+| 反馈 | 邮箱 `hangdudu0@agent.qq.com`，`mailto:` + 复制邮箱 |
 | 合规 | 个人学习；不绕过会员/付费番剧；不上传数据 |
 
 ---
@@ -73,9 +74,12 @@
 | 常见问题 FAQ（Pages） | https://snowflake-hangdudu.github.io/bili-downloader/faq.html |
 | Edge 开发者 | https://partner.microsoft.com/dashboard |
 | Edge 上架说明 | 见 `store/EDGE_SUBMIT.md` |
+| Firefox 开发者中心 | https://addons.mozilla.org/developers/ |
+| Firefox 上架说明 | 见 `store/FIREFOX_SUBMIT.md` |
 | GitHub Pages 说明 | 见 `store/GITHUB_PAGES.md` |
 
 **Edge 商店状态（2026-08-02）：** 准备发 **1.0.2**（并行下载 + 独立进度卡等）。发版步骤见 `store/EDGE_SUBMIT.md` 文首。
+**Firefox 商店状态（2026-08-04）：** **1.0.2** 已提交 AMO，当前等待审核。提交流程与注意事项见 `store/FIREFOX_SUBMIT.md`。
 
 ---
 
@@ -107,14 +111,17 @@ bilibili-downloader/
 │   ├── logo-300.png           # Edge 商店 Logo
 │   ├── tile-440x280.png       # Edge 推广图
 │   ├── EDGE_SUBMIT.md         # Edge 表单文案
+│   ├── FIREFOX_SUBMIT.md      # Firefox（AMO）提交流程与字段
 │   └── GITHUB_PAGES.md
 ├── scripts/
 │   ├── pack.py                # 打 zip（仅扩展运行文件）
+│   ├── pack_firefox.py        # 打 Firefox XPI（含 gecko 字段）
 │   ├── gen_icons.py           # 从 icon-source 生成 icons/*
 │   ├── gen_icon_source.py     # 程序化备用源图（慎用，会覆盖手调源图）
 │   └── gen_store_assets.py    # 生成 store/logo、tile
 ├── test/                      # 本地测试（不打进 zip）
-└── bilibili-downloader.zip    # pack.py 输出，上传 Edge 用
+├── bilibili-downloader.zip    # pack.py 输出，上传 Edge / Chrome 用
+└── bilibili-downloader-firefox.xpi # pack_firefox.py 输出，上传 AMO 用
 ```
 
 ### 勿恢复的旧文件
@@ -355,6 +362,7 @@ edge://extensions → 开发者模式 → 加载已解压 → bilibili-downloade
 
 ```bash
 python scripts/pack.py          # → bilibili-downloader.zip（根目录含 manifest.json）
+python scripts/pack_firefox.py  # → bilibili-downloader-firefox.xpi
 python scripts/gen_icons.py     # 可选，更新 icons
 python scripts/gen_store_assets.py
 ```
@@ -378,6 +386,7 @@ python scripts/gen_store_assets.py
 4. Partner Center 上传该 zip  
 
 **Edge 更新已上架扩展：** Partner Center → Update → 上传新 zip（version 必须递增）→ 重新提交审核。
+**Firefox 提交 / 更新：** AMO → 上传 `bilibili-downloader-firefox.xpi`；提审字段、隐私、审核备注见 `store/FIREFOX_SUBMIT.md`。
 
 **隐私政策变更：** 同步改 `docs/index.html` 与 `store/privacy.html`，`git push`，Pages 自动更新。
 
@@ -425,7 +434,7 @@ python scripts/gen_store_assets.py
 | 版本 | 说明 |
 |------|------|
 | v1.0.0 | 正式版：双入口 UI、i18n、Edge 提交、QQ 反馈、mp4-remux；含进度条/暂停取消、分 P 队列、预估体积、登录提示、FAQ、进度 MB、失败短指引、并行下载与 CDN 探测等。2026-07-22 Edge 首审未过（1.1.3 测不通），完善 `EDGE_SUBMIT.md` 后重提 |
-| v1.0.1 | 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标 + 悬浮按钮圆角方形 + 反馈改为邮箱 `hangdudu@agent.qq.com`（mailto 直连）+ M4A 音频模式（DASH 音频轨直存）+ 下载历史（最近 50 条，可跳转重下）+ 文件名按码点截断 + SPA 路由即时刷新（pushState/popstate 监听）+ FAB 可拖拽并记住位置 + 合并库按需加载 + 轻请求超时 20s/下载 600s + 下载中切页保护 + `storage` 权限 |
+| v1.0.1 | 黑白极简主题（跟随系统深浅色）+ B 站蓝播放键图标 + 悬浮按钮圆角方形 + 反馈改为邮箱 `hangdudu0@agent.qq.com`（mailto 直连）+ M4A 音频模式（DASH 音频轨直存）+ 下载历史（最近 50 条，可跳转重下）+ 文件名按码点截断 + SPA 路由即时刷新（pushState/popstate 监听）+ FAB 可拖拽并记住位置 + 合并库按需加载 + 轻请求超时 20s/下载 600s + 下载中切页保护 + `storage` 权限 |
 | v1.0.2 | 多任务并行下载（最多 3 路）+ 每任务独立进度卡（可单独暂停/取消）+ FAB 拖拽修复（禁 img 原生拖）+ 历史 MP4/M4A 可并列 + 会话缓存按 `href#p=` + 分 P 并行/重试短提示 + 商店 Search Terms / 更新说明 / `_locales` 检索文案 |
 
 ---
