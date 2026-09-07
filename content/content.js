@@ -235,6 +235,8 @@
   let downloading = false;
   let queueRunning = false;
   let queueCancelled = false;
+  let queuePaused = false;
+  let queuePauseWaiter = null;
 
   const HISTORY_KEY = 'biliDlHistory';
   const HISTORY_MAX = 50;
@@ -460,6 +462,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
               <span id="bili-dl-queue-label">队列下载全部分 P</span>
             </button>
+            <button id="bili-dl-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">暂停全部</button>
             <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
             <div id="bili-dl-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
@@ -496,6 +499,7 @@
             <div id="bili-dl-list-items" class="bili-dl-list-items"></div>
             <button id="bili-dl-list-load-more" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">继续加载</button>
             <button id="bili-dl-list-start" type="button" class="bili-dl-btn" disabled>下载已选视频</button>
+            <button id="bili-dl-list-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">暂停全部</button>
             <button id="bili-dl-list-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
             <div id="bili-dl-list-job-list" class="bili-dl-job-list hidden"></div>
             <button id="bili-dl-list-retry-failed" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">重试失败视频</button>
@@ -551,6 +555,7 @@
     const listLoadMoreBtn = panel.querySelector('#bili-dl-list-load-more');
     const listStartBtn = panel.querySelector('#bili-dl-list-start');
     const listPillsEl = panel.querySelector('#bili-dl-list-quality-pills');
+    const listQueuePauseBtn = panel.querySelector('#bili-dl-list-queue-pause');
     const listQueueCancelBtn = panel.querySelector('#bili-dl-list-queue-cancel');
     const listJobListEl = panel.querySelector('#bili-dl-list-job-list');
     const listRetryFailedBtn = panel.querySelector('#bili-dl-list-retry-failed');
@@ -583,6 +588,7 @@
     const startBtn = panel.querySelector('#bili-dl-start');
     const coverDownloadBtn = panel.querySelector('#bili-dl-download-cover');
     const queueBtn = panel.querySelector('#bili-dl-queue-all');
+    const queuePauseBtn = panel.querySelector('#bili-dl-queue-pause');
     const queueCancelBtn = panel.querySelector('#bili-dl-queue-cancel');
     const queueLabelEl = panel.querySelector('#bili-dl-queue-label');
     const jobListEl = panel.querySelector('#bili-dl-job-list');
@@ -1336,8 +1342,8 @@
       cancelled: 'cancelled'
     });
     const taskUi = {
-      video: { jobList: jobListEl, queueCancel: queueCancelBtn, body: videoBodyEl },
-      list: { jobList: listJobListEl, queueCancel: listQueueCancelBtn, body: listBodyEl }
+      video: { jobList: jobListEl, queuePause: queuePauseBtn, queueCancel: queueCancelBtn, body: videoBodyEl },
+      list: { jobList: listJobListEl, queuePause: listQueuePauseBtn, queueCancel: listQueueCancelBtn, body: listBodyEl }
     };
 
     function getTaskUi(scope) {
@@ -1395,24 +1401,76 @@
       Object.entries(taskUi).forEach(([scope, ui]) => {
         const hasJobs = Array.from(activeJobs.values()).some((job) => jobScope(job) === scope);
         ui.jobList.classList.toggle('hidden', !hasJobs);
-        ui.queueCancel.classList.toggle('hidden', !queueRunning || operationMode !== scope);
+        const showQueueControls = queueRunning && operationMode === scope;
+        ui.queuePause.classList.toggle('hidden', !showQueueControls);
+        ui.queueCancel.classList.toggle('hidden', !showQueueControls);
+        ui.queuePause.textContent = queuePaused ? '继续全部' : '暂停全部';
       });
+    }
+
+    function waitWhileQueuePaused() {
+      if (!queuePaused || queueCancelled) return Promise.resolve();
+      return new Promise((resolve) => {
+        queuePauseWaiter = { resolve };
+      });
+    }
+
+    function resumeEntireQueue() {
+      queuePaused = false;
+      agentSignal('RESUME_DOWNLOAD');
+      if (queuePauseWaiter) {
+        queuePauseWaiter.resolve();
+        queuePauseWaiter = null;
+      }
+      syncJobListVisibility();
+    }
+
+    function pauseEntireQueue() {
+      const merging = [...activeJobs.values()].some((job) => job.merging);
+      if (merging) {
+        const message = '正在合成，当前阶段无法暂停；可等待合成完成或取消整队。';
+        if (operationMode === 'list') setListStatus(message, 'error');
+        else showStatus('error', message);
+        return;
+      }
+      queuePaused = true;
+      agentSignal('PAUSE_DOWNLOAD');
+      syncJobListVisibility();
+    }
+
+    function toggleEntireQueuePause() {
+      if (!queueRunning || queueCancelled) return;
+      if (queuePaused) resumeEntireQueue();
+      else pauseEntireQueue();
     }
 
     function cancelEntireQueue() {
       if (!queueRunning) return;
       queueCancelled = true;
+      queuePaused = false;
+      if (queuePauseWaiter) {
+        queuePauseWaiter.resolve();
+        queuePauseWaiter = null;
+      }
       activeJobs.forEach((job) => {
         agentSignal('CANCEL_DOWNLOAD', { jobId: job.jobId });
       });
-      Object.values(taskUi).forEach(({ queueCancel }) => {
+      Object.values(taskUi).forEach(({ queuePause, queueCancel }) => {
+        queuePause.disabled = true;
         queueCancel.disabled = true;
         queueCancel.textContent = '正在取消…';
       });
     }
 
     function resetQueueCancelButton() {
-      Object.values(taskUi).forEach(({ queueCancel }) => {
+      queuePaused = false;
+      if (queuePauseWaiter) {
+        queuePauseWaiter.resolve();
+        queuePauseWaiter = null;
+      }
+      Object.values(taskUi).forEach(({ queuePause, queueCancel }) => {
+        queuePause.disabled = false;
+        queuePause.textContent = '暂停全部';
         queueCancel.disabled = false;
         queueCancel.textContent = '取消整队';
       });
@@ -2059,6 +2117,7 @@
       queueRunning = true;
       operationMode = 'video';
       queueCancelled = false;
+      queuePaused = false;
       startBtn.disabled = true;
       queueBtn.disabled = true;
       queueLabelEl.textContent = '自动依次下载分 P…';
@@ -2083,6 +2142,9 @@
           debugLog('队列', `P${i + 1} 解析失败: ${err.message}`);
           return;
         }
+
+        await waitWhileQueuePaused();
+        if (queueCancelled) return;
 
         const job = createDownloadTask({
           jobId,
@@ -2127,6 +2189,7 @@
           const phase = job.cardEl?.querySelector('.bili-dl-job-phase');
           if (phase) phase.textContent = '重试中…';
           await new Promise((r) => setTimeout(r, 1000));
+          await waitWhileQueuePaused();
           if (queueCancelled) return;
           try {
             await tryDownload();
@@ -2160,6 +2223,8 @@
 
       async function worker() {
         while (!queueCancelled) {
+          await waitWhileQueuePaused();
+          if (queueCancelled) break;
           const i = nextIndex++;
           if (i >= total) break;
           await runOnePart(i);
@@ -2212,6 +2277,7 @@
       queueRunning = true;
       operationMode = 'list';
       queueCancelled = false;
+      queuePaused = false;
       listStartBtn.disabled = true;
       updateListRetryFailed();
       await setupMuxInPage().catch(() => {});
@@ -2222,6 +2288,7 @@
       const failedTasks = [];
       try {
         for (let index = 0; index < items.length; index++) {
+          await waitWhileQueuePaused();
           if (queueCancelled) break;
           const item = items[index];
           const retryTask = isRetry ? retryTasks[index] : null;
@@ -2337,7 +2404,9 @@
     };
     coverDownloadBtn.onclick = downloadCover;
     queueBtn.onclick = startQueueDownload;
+    queuePauseBtn.onclick = toggleEntireQueuePause;
     queueCancelBtn.onclick = cancelEntireQueue;
+    listQueuePauseBtn.onclick = toggleEntireQueuePause;
     listQueueCancelBtn.onclick = cancelEntireQueue;
     listStartBtn.onclick = startListDownload;
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);

@@ -14,6 +14,8 @@ assert.doesNotMatch(js, /showStatus\('success', '已开始下载封面'\)/);
 assert.match(js, /aria-selected="true"/);
 assert.match(js, /event\.key !== 'Escape'/);
 assert.match(js, /id="bili-dl-list-queue-cancel"/);
+assert.match(js, /id="bili-dl-queue-pause"/);
+assert.match(js, /id="bili-dl-list-queue-pause"/);
 assert.match(js, /id="bili-dl-list-job-list"/);
 assert.match(js, /const taskUi = \{[\s\S]*video:[\s\S]*list:/);
 assert.doesNotMatch(js, /insertBefore\(/, '切换 Tab 不能移动单视频或列表的任务节点');
@@ -53,5 +55,8 @@ assert.match(agent, /safeFilename\(filenameBase \|\| title, 'video'\)/);
 assert.match(agent, /safeFilename\(filenameBase \|\| title, 'audio'\)/);
 assert.match(js, /queueLabelEl\.textContent = '自动依次下载分 P…'/);
 assert.match(js, /const workers = 1;/, '分 P 队列必须自动串行，不能重新引入并发下载');
+assert.match(js, /function toggleEntireQueuePause\(\)/);
+assert.match(js, /queuePause\.textContent = queuePaused \? '继续全部' : '暂停全部'/);
+assert.match(js, /await waitWhileQueuePaused\(\);/);
 
 console.log('task UI regression checks passed');
