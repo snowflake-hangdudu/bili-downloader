@@ -6,7 +6,7 @@
   --bdl-surface: #f5f5f5;
   --bdl-bg: #ffffff;
   --bdl-text: #111111;
-  --bdl-text-muted: #7a7a7a;
+  --bdl-text-muted: #666666;
   --bdl-border: #e3e3e3;
   --bdl-header-text: #111111;
   --bdl-success-bg: #f5f5f5;
@@ -1383,4 +1383,12 @@
 
 .bili-dl-history-btn:hover {
   background: var(--bdl-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bili-dl-panel-root *, #bili-dl-panel-root *::before, #bili-dl-panel-root *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

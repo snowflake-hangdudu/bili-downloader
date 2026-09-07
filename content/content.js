@@ -182,21 +182,30 @@
     return muxReadyPromise;
   }
 
-  function downloadBlob(blob, filename) {
+  async function downloadBlob(blob, filename, shouldCancel = () => false) {
+    if (shouldCancel()) throw new Error('下载已取消');
+    if (!blob?.size || !filename) throw new Error('保存数据不可用，请刷新页面后重试');
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        a.remove();
-        resolve();
-      }, 1000);
-    });
+    let downloadId;
+    try {
+      const started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
+      if (!started?.ok) throw new Error(started?.error || '无法创建浏览器下载');
+      downloadId = started.downloadId;
+      for (;;) {
+        if (shouldCancel()) {
+          await EXT.runtime.sendMessage({ type: 'BILI_DL_CANCEL_MEDIA', downloadId });
+          throw new Error('下载已取消');
+        }
+        const result = await EXT.runtime.sendMessage({ type: 'BILI_DL_MEDIA_STATE', downloadId });
+        if (!result?.ok) throw new Error(result?.error || '无法确认保存结果，请检查浏览器下载记录');
+        if (result.state === 'complete') return downloadId;
+        if (result.state === 'interrupted') throw new Error('浏览器保存失败：' + (result.error || '下载中断'));
+        // Poll only while a native save is active; no idle/background-page polling.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   function formatView(n) {
@@ -1021,6 +1030,12 @@
       statusEl.classList.remove('hidden', 'success', 'error');
       statusEl.classList.add(type);
       statusEl.textContent = text;
+      statusEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
+      if (type === 'success') {
+        const action = appendTextElement(statusEl, 'button', 'bili-dl-status-action', '查看浏览器下载记录');
+        action.type = 'button';
+        action.onclick = openBrowserDownloads;
+      }
     };
 
     function isListPage() {
@@ -1453,6 +1468,7 @@
         queuePauseWaiter = null;
       }
       activeJobs.forEach((job) => {
+        job.cancelRequested = true;
         agentSignal('CANCEL_DOWNLOAD', { jobId: job.jobId });
       });
       Object.values(taskUi).forEach(({ queuePause, queueCancel }) => {
@@ -1516,6 +1532,7 @@
       const bar = el.querySelector('.bili-dl-progress-bar');
 
       pauseBtn.onclick = () => {
+        if (queuePaused) { resumeEntireQueue(); return; }
         const j = activeJobs.get(job.jobId);
         if (!j || j.merging) return;
         if (j.paused) {
@@ -1530,6 +1547,7 @@
       };
 
       cancelBtn.onclick = () => {
+        job.cancelRequested = true;
         agentSignal('CANCEL_DOWNLOAD', { jobId: job.jobId });
       };
 
@@ -1580,9 +1598,9 @@
       if (step === 'merge' || step === 'save') {
         job.merging = step === 'merge';
         // 流式合成可中断：保留取消入口，避免大文件合成时用户只能等待或刷新页面。
-        setJobActionsVisible(el, step !== 'save');
+        setJobActionsVisible(el, true);
         pauseBtn.disabled = step === 'merge' || step === 'save';
-        cancelBtn.disabled = step === 'save';
+        cancelBtn.disabled = false;
       } else if (step !== 'paused') {
         job.merging = false;
         setJobActionsVisible(el, true);
@@ -1942,6 +1960,9 @@
       const format = opts.format || selectedFormat;
       const qn = opts.qn != null ? opts.qn : selectedQn;
       const jobId = opts.jobId || null;
+      const shouldCancel = () => Boolean(activeJobs.get(jobId)?.cancelRequested || (queueRunning && queueCancelled));
+      await waitWhileQueuePaused();
+      if (shouldCancel()) throw new Error('下载已取消');
 
       if (format === 'm4a') {
         const result = await agentCall('START_DOWNLOAD', {
@@ -1952,6 +1973,7 @@
           audioOnly: true,
           jobId
         }, 0);
+        result.downloadId = await downloadBlob(result.blob, result.filename, shouldCancel);
         updateProgress('save', 100, 0, 0, jobId);
         return result;
       }
@@ -1965,13 +1987,13 @@
         jobId
       }, 0);
 
-      if (result.merged) {
+      if (result.blob) {
         updateProgress('save', 95, 0, 0, jobId);
         const blob = result.blob || new Blob([result.mp4], { type: 'video/mp4' });
-        await downloadBlob(blob, result.filename);
+        result.downloadId = await downloadBlob(blob, result.filename, shouldCancel);
         updateProgress('save', 100, 0, 0, jobId);
       } else {
-        updateProgress('save', 100, 0, 0, jobId);
+        throw new Error('保存数据不可用，请刷新页面后重试');
       }
       return result;
     }
@@ -2109,6 +2131,7 @@
       if (!(await ensureMuxReady())) return;
 
       const total = videoInfo.pages.length;
+      const queueHref = location.href;
       const qn = selectedQn;
       const format = selectedFormat;
       const label = format === 'm4a' ? '音频' : getSelectedQualityLabel();
@@ -2135,7 +2158,7 @@
         const jobId = `part-${Date.now()}-${i}-${++jobSeq}`;
         let partInfo;
         try {
-          const res = await agentCall('RESOLVE_VIDEO', { href: location.href, pageIndex: i });
+          const res = await agentCall('RESOLVE_VIDEO', { href: queueHref, pageIndex: i });
           partInfo = res.info;
         } catch (err) {
           fail++;

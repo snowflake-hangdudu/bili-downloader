@@ -5,8 +5,31 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (['BILI_DL_SAVE_MEDIA', 'BILI_DL_MEDIA_STATE', 'BILI_DL_CANCEL_MEDIA'].includes(msg?.type)) {
+    (async () => {
+      const senderUrl = new URL(_sender.url || '');
+      if (_sender.id !== chrome.runtime.id || !_sender.tab || senderUrl.protocol !== 'https:' ||
+          !/(^|\.)bilibili\.com$/.test(senderUrl.hostname)) throw new Error('不允许的下载请求');
+      if (msg.type === 'BILI_DL_SAVE_MEDIA') {
+        const url = new URL(String(msg.url || ''));
+        if (url.protocol !== 'blob:' || url.origin !== senderUrl.origin) throw new Error('无效的媒体地址');
+        const filename = String(msg.filename || '');
+        if (!filename || /[\\/\x00-\x1f]/.test(filename) || !/\.(mp4|m4a)$/.test(filename)) throw new Error('无效的文件名');
+        const downloadId = await chrome.downloads.download({ url: url.href, filename, saveAs: false, conflictAction: 'uniquify' });
+        return { ok: true, downloadId };
+      }
+      if (!Number.isInteger(msg.downloadId)) throw new Error('无效的下载编号');
+      const [item] = await chrome.downloads.search({ id: msg.downloadId });
+      // Re-check ownership after service-worker restarts; never expose other downloads.
+      if (!item || item.byExtensionId !== chrome.runtime.id) throw new Error('下载记录不可用，请打开浏览器下载记录检查');
+      if (msg.type === 'BILI_DL_CANCEL_MEDIA' && item.state === 'in_progress') await chrome.downloads.cancel(item.id);
+      return { ok: true, state: item.state, error: item.error || '' };
+    })().then(sendResponse, (error) => sendResponse({ ok: false, error: String(error.message || error) }));
+    return true;
+  }
   if (msg?.type === 'BILI_DL_OPEN_DOWNLOADS') {
-    chrome.tabs.create({ url: 'chrome://downloads/' }, () => {
+    const url = typeof browser !== 'undefined' && browser.runtime.getBrowserInfo ? 'about:downloads' : 'chrome://downloads/';
+    chrome.tabs.create({ url }, () => {
       const error = chrome.runtime.lastError;
       sendResponse({ ok: !error, error: error?.message || '' });
     });

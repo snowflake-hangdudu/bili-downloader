@@ -177,7 +177,8 @@
       if (key) seen.add(key);
       uniq.push(item);
     }
-    return uniq.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    const aac = (item) => /^mp4a/i.test(item.codecs || '') || [30216, 30232, 30280].includes(Number(item.id));
+    return uniq.sort((a, b) => Number(aac(b)) - Number(aac(a)) || (Number(b.id) || 0) - (Number(a.id) || 0));
   }
 
   function collectAudioUrls(dash) {
@@ -261,6 +262,8 @@
       return false;
     } finally {
       clearTimeout(timer);
+      // A server may ignore the two-byte Range. Never keep downloading a probe body.
+      controller.abort();
     }
   }
 
@@ -570,7 +573,7 @@
         const durl = await apiGet(
           `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
         );
-        if (durl.durl?.length) {
+        if (durl.durl?.length === 1) {
           const urls = extractDurlUrls(durl.durl[0]);
           if (urls.length) {
             log('步骤3', `低清 ${qn}P 使用 durl 单文件 (${(durl.durl[0].size / 1024 / 1024).toFixed(1)}MB)`);
@@ -593,7 +596,9 @@
           const maxId = Math.max(...dash.dash.video.map((v) => v.id));
           throw new Error(`该视频无 ${QUALITY_MAP[qn] || qn + 'P'} 片源（源最高 ${QUALITY_MAP[maxId] || maxId + 'P'}）`);
         }
-        const video = videos.sort((a, b) => urlScore(pickBestStreamUrl(b)) - urlScore(pickBestStreamUrl(a)))[0];
+        // Prefer AVC when the same quality offers several codecs (no transcoding).
+        const avc = (item) => Number(item.codecid) === 7 || /^avc/i.test(item.codecs || '');
+        const video = videos.sort((a, b) => Number(avc(b)) - Number(avc(a)) || urlScore(pickBestStreamUrl(b)) - urlScore(pickBestStreamUrl(a)))[0];
         const audioUrls = collectAudioUrls(dash.dash);
         const videoUrl = pickBestStreamUrl(video);
         const audioUrl = audioUrls[0] || null;
@@ -614,7 +619,8 @@
     const durl = await apiGet(
       `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
     );
-    if (durl.durl?.length) {
+    if (durl.durl?.length > 1) throw new Error('该片源由多个旧格式片段组成，请切换清晰度后重试');
+    if (durl.durl?.length === 1) {
       const urls = extractDurlUrls(durl.durl[0]);
       if (urls.length) return { type: 'durl', urls };
     }
@@ -665,8 +671,8 @@
         sendProgress(session, 'audio', p.percent, { received: p.received, total: p.total });
       }, preferHost, 'audio');
       sendProgress(session, 'save', 100);
-      saveBlob(blob, base + '.m4a');
-      return { audioOnly: true, filename: base + '.m4a', jobId: session.jobId };
+      throwIfCancelled(session);
+      return { audioOnly: true, blob, filename: base + '.m4a', jobId: session.jobId };
     } finally {
       destroySession(session.jobId);
     }
@@ -723,6 +729,7 @@
       trackProgress: {},
       progressReportAt: {},
       pauseWait: null,
+      merging: false,
       lastProgress: null
     };
     sessions.set(id, session);
@@ -732,6 +739,9 @@
   function destroySession(jobId) {
     const s = sessions.get(jobId);
     if (!s) return;
+    s.cancelled = true;
+    s.pauseWait?.resolve();
+    s.pauseWait = null;
     Object.values(s.controllers).forEach((c) => c?.abort());
     s.abortController?.abort();
     sessions.delete(jobId);
@@ -781,12 +791,11 @@
   function pauseDownloadControl(jobId) {
     const targets = jobId ? [sessions.get(jobId)].filter(Boolean) : [...sessions.values()];
     for (const session of targets) {
-      if (session.cancelled || session.paused) continue;
+      if (session.cancelled || session.paused || session.merging) continue;
       session.paused = true;
       const p = getDisplayProgress(session);
       sendProgress(session, 'paused', p.percent || 0, { received: p.received, total: p.total });
       abortSessionControllers(session);
-      window.postMessage({ source: AGENT, type: 'MERGE_CANCEL', jobId: session.jobId }, '*');
     }
   }
 
@@ -813,14 +822,19 @@
         session.pauseWait = null;
       }
       abortSessionControllers(session);
+      window.postMessage({ source: AGENT, type: 'MERGE_CANCEL', jobId: session.jobId }, '*');
     }
   }
 
   function waitWhilePaused(session) {
     if (!session.paused || session.cancelled) return Promise.resolve();
-    return new Promise((resolve) => {
-      session.pauseWait = { resolve };
-    });
+    // Video and audio can both be waiting: share one gate instead of overwriting a resolver.
+    if (!session.pauseWait) {
+      let resolve;
+      const promise = new Promise((done) => { resolve = done; });
+      session.pauseWait = { resolve, promise };
+    }
+    return session.pauseWait.promise;
   }
 
   function throwIfCancelled(session) {
@@ -871,6 +885,8 @@
       let total = 0;
 
       try {
+        await waitWhilePaused(session);
+        throwIfCancelled(session);
         working = await pickWorkingUrl(src, preferHost);
         if (!working) {
           lastErr = new Error('CDN 探测失败: ' + hostFromUrl(src));
@@ -881,6 +897,7 @@
         log('下载', '使用 ' + hostFromUrl(working));
 
         while (true) {
+          await waitWhilePaused(session);
           throwIfCancelled(session);
           session.abortController = new AbortController();
           session.controllers[trackId] = session.abortController;
@@ -911,13 +928,22 @@
             break;
           }
 
-          if (received === 0) {
-            const contentRange = res.headers.get('content-range');
-            if (contentRange) {
-              const m = contentRange.match(/\/(\d+)\s*$/);
-              if (m) total = parseInt(m[1], 10);
+          if (received > 0 && res.status === 200) {
+            // Range ignored: restart, never append a full response to the partial file.
+            chunks = [];
+            received = 0;
+            total = 0;
+          }
+          if (res.status === 206) {
+            const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('content-range') || '');
+            if (!range || Number(range[1]) !== received || Number(range[2]) < received ||
+                Number(range[2]) >= Number(range[3]) || (total && total !== Number(range[3]))) {
+              await res.body?.cancel();
+              throw new Error('下载范围不一致，请重试');
             }
-            if (!total) total = parseInt(res.headers.get('content-length') || '0', 10);
+            total = Number(range[3]);
+          } else if (received === 0) {
+            total = Number(res.headers.get('content-length')) || 0;
           }
 
           const reader = res.body.getReader();
@@ -939,7 +965,10 @@
               }
 
               const { done, value } = readResult;
-              if (done) break;
+              if (done) {
+                if (session.paused) needResume = true;
+                break;
+              }
 
               chunks.push(value);
               received += value.length;
@@ -956,6 +985,8 @@
             continue;
           }
 
+          if (total && received !== total) throw new Error('下载文件不完整，请重试');
+
           reportDownloadProgress(session, trackId, { received, total, percent: total ? Math.round((received / total) * 100) : 0 }, onProgress, true);
           log('下载', '成功 ' + (received / 1024 / 1024).toFixed(1) + 'MB');
           if (received < 1024) {
@@ -971,19 +1002,6 @@
       }
     }
     throw new Error(formatDownloadError(lastErr || { message: '所有 CDN 镜像均不可用' }));
-  }
-
-  function saveBlob(blob, filename) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 5000);
   }
 
   function mergeM4sInWorker(videoBlob, audioBlob, session) {
@@ -1049,6 +1067,9 @@
     } catch (error) {
       // Worker 被企业策略或页面环境阻止时，仍使用已分段、可取消的主线程实现兜底。
       if (!/^WORKER_UNAVAILABLE:/.test(String(error?.message || error))) throw error;
+      if (videoBlob.size + audioBlob.size >= 512 * 1024 * 1024) {
+        throw new Error('合成 Worker 不可用。为避免页面卡顿，已停止大文件合成；请刷新页面或检查浏览器扩展策略后重试');
+      }
       log('合并', 'Worker 不可用，改用兼容合成模式');
       return mergeM4sFallback(videoBlob, audioBlob, session);
     }
@@ -1081,20 +1102,22 @@
           sendProgress(session, 'download', p.percent, { received: p.received, total: p.total });
         }, preferHost);
         sendProgress(session, 'save', 100);
-        saveBlob(blob, base + '.mp4');
-        return { dash: false, jobId: session.jobId };
+        throwIfCancelled(session);
+        const header = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+        if (String.fromCharCode(...header.slice(4, 8)) !== 'ftyp') throw new Error('片源不是 MP4 文件，请切换清晰度后重试');
+        return { dash: false, blob, filename: base + '.mp4', jobId: session.jobId };
       }
 
       const sniffed = sniffPlayingUrls();
       const preferHost = hostFromUrl(sniffed.video || sniffed.audio);
-      let videoUrl = streams.video || sniffed.video;
-      let audioUrl = streams.audio || sniffed.audio;
+      let videoUrl = streams.video;
+      let audioUrl = streams.audio;
       const videoUrls = streams.videoUrls?.length
         ? streams.videoUrls
-        : [videoUrl, sniffed.video].filter(Boolean);
+        : [videoUrl].filter(Boolean);
       const audioUrls = streams.audioUrls?.length
         ? streams.audioUrls
-        : [audioUrl, sniffed.audio].filter(Boolean);
+        : [audioUrl].filter(Boolean);
 
       if (!videoUrl) throw new Error('无视频流，请先点击播放视频再下载');
       if (preferHost) log('步骤3', '嗅探到播放节点 ' + preferHost);
@@ -1141,8 +1164,7 @@
             return blob;
           }).catch((e) => {
             if (e.message === '下载已取消') throw e;
-            log('下载', '音频下载失败: ' + e.message);
-            return null;
+            throw new Error('音频下载失败：' + e.message);
           })
         : Promise.resolve(null);
 
@@ -1158,6 +1180,9 @@
       }
 
       if (aBlob) {
+        await waitWhilePaused(session);
+        throwIfCancelled(session);
+        session.merging = true;
         const mergeBytes = vBlob.size + aBlob.size;
         sendProgress(session, 'merge', 0, { received: 0, total: mergeBytes });
         const mp4Blob = await mergeM4sInPage(vBlob, aBlob, session);
@@ -1170,8 +1195,7 @@
         };
       }
 
-      saveBlob(vBlob, base + '_video.m4s');
-      return { dash: true, videoOnly: true, jobId: session.jobId };
+      throw new Error('未获取到完整音频轨，请切换清晰度后重试');
     } finally {
       destroySession(session.jobId);
     }
