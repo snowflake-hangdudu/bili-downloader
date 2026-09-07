@@ -388,7 +388,7 @@
     panel.id = 'bili-dl-panel-root';
     panel.appendChild(createFragment(`
       <div id="bili-dl-panel">
-        <button id="bili-dl-toggle" title="下载视频">
+        <button id="bili-dl-toggle" title="打开下载助手" aria-label="打开下载助手" aria-expanded="false">
           <img src="${ICON_URL}" alt="">
         </button>
         <div id="bili-dl-menu" class="hidden">
@@ -2349,15 +2349,25 @@
       menu.classList.remove('is-entering');
       void menu.offsetWidth;
       menu.classList.add('is-entering');
+      toggleBtn.title = '收起下载助手';
+      toggleBtn.setAttribute('aria-label', '收起下载助手');
+      toggleBtn.setAttribute('aria-expanded', 'true');
     }
 
     function closeMenuShell() {
       menu.classList.add('hidden');
       menu.classList.remove('is-entering');
+      toggleBtn.title = '打开下载助手';
+      toggleBtn.setAttribute('aria-label', '打开下载助手');
+      toggleBtn.setAttribute('aria-expanded', 'false');
     }
     toggleBtn.onclick = async () => {
       if (toggleDragged) return; // 拖拽后不触发点击
-      if (isOpen) return; // 面板只由右上角 X 关闭，避免误触后任务区消失
+      if (isOpen) {
+        isOpen = false;
+        closeMenuShell();
+        return;
+      }
       isOpen = true;
       modeTabsEl.classList.toggle('hidden', !isListPage());
       menu.classList.toggle('is-list-page', isListPage());
