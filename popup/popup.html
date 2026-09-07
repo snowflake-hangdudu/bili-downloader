@@ -70,6 +70,7 @@
           <li>实际下载在页面右下角悬浮面板操作</li>
           <li>支持 MP4 视频与 M4A 音频；最多同时 3 路并行</li>
           <li>多 P 可「队列下载」；并行进行中请先完成再开队列</li>
+          <li>列表页可进入「列表下载」，每次最多勾选 10 个视频</li>
           <li>下载失败？<a id="popup-faq-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">查看常见问题</a></li>
         </ul>
 
@@ -82,7 +83,7 @@
       <div id="state-empty" class="hidden">
         <div class="popup-detect warn">
           <span class="popup-dot warn"></span>
-          <span>当前不是视频播放页</span>
+          <span>当前不是支持的下载页面</span>
         </div>
 
         <div class="popup-empty-hero">
@@ -92,15 +93,15 @@
               <path d="M10 9l5 3-5 3V9z"/>
             </svg>
           </div>
-          <p class="popup-empty-title">仅支持 /video 播放页</p>
-          <p class="popup-empty-desc">请打开 bilibili.com/video/BV… 或 /video/av…。首页、搜索、番剧页没有下载入口。</p>
+          <p class="popup-empty-title">支持 /video 播放页与 /list 列表页</p>
+          <p class="popup-empty-desc">请打开 bilibili.com/video/BV…、/video/av… 或 /list/…。首页、搜索、番剧页没有下载入口。</p>
           <p id="empty-current-site" class="popup-empty-site">当前页面：—</p>
         </div>
 
         <div class="popup-steps">
           <div class="popup-step">
             <span class="popup-step-num">1</span>
-            <span class="popup-step-text">打开普通视频页（含 BV / av）</span>
+            <span class="popup-step-text">打开视频页（BV / av）或列表页</span>
           </div>
           <div class="popup-step">
             <span class="popup-step-num">2</span>
@@ -108,7 +109,7 @@
           </div>
           <div class="popup-step">
             <span class="popup-step-num">3</span>
-            <span class="popup-step-text">选清晰度，下载 MP4 或 M4A</span>
+            <span class="popup-step-text">选清晰度下载；列表每次最多选 10 条</span>
           </div>
         </div>
 

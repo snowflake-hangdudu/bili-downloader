@@ -50,8 +50,66 @@
   display: none !important;
 }
 
+#bili-dl-panel-root button:focus-visible,
+#bili-dl-panel-root a:focus-visible,
+#bili-dl-panel-root input:focus-visible,
+#bili-dl-panel-root select:focus-visible {
+  outline: 2px solid var(--bdl-accent);
+  outline-offset: 2px;
+}
+
 #bili-dl-menu.is-page .bili-dl-footer,
 #bili-dl-menu.is-page #bili-dl-store-rating { display: none !important; }
+
+.bili-dl-mode-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+
+.bili-dl-mode-tabs button {
+  flex: 1;
+  border: 1px solid var(--bdl-border);
+  border-radius: 7px;
+  background: var(--bdl-surface);
+  color: var(--bdl-text-muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bili-dl-mode-tabs button.active {
+  color: var(--bdl-accent-contrast);
+  background: var(--bdl-accent);
+  border-color: var(--bdl-accent);
+}
+
+.bili-dl-list-body { width: 100%; box-sizing: border-box; padding: 14px 16px 16px; background: var(--bdl-bg); }
+.bili-dl-list-tools { display: flex; gap: 8px; margin-bottom: 10px; }
+.bili-dl-list-tools input { min-width: 0; flex: 1; height: 32px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 12px; }
+.bili-dl-list-tools input:focus { outline: 2px solid var(--bdl-accent-soft); border-color: var(--bdl-accent); }
+.bili-dl-list-filter { display: inline-flex; gap: 4px; flex: 0 0 auto; }
+.bili-dl-list-filter button { min-width: 42px; padding: 0 8px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text-muted); font-size: 11px; cursor: pointer; }
+.bili-dl-list-filter button.active { color: var(--bdl-accent-contrast); border-color: var(--bdl-accent); background: var(--bdl-accent); }
+.bili-dl-list-tools select { max-width: 64px; padding: 0 4px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 11px; }
+/* 列表页回归简洁下载布局；滚动到底仍会后台追加下一页。 */
+.bili-dl-list-tools,
+#bili-dl-list-load-more { display: none !important; }
+.bili-dl-list-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+.bili-dl-list-head span, .bili-dl-list-status { color: var(--bdl-text-muted); font-size: 11px; }
+.bili-dl-list-head button { margin-left: 4px; padding: 0; border: 0; background: transparent; color: var(--bdl-accent); font-size: 11px; cursor: pointer; }
+.bili-dl-list-items { max-height: 210px; overflow: auto; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); margin-bottom: 10px; }
+.bili-dl-list-item { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--bdl-border); cursor: pointer; }
+.bili-dl-list-item:last-child { border-bottom: 0; }
+.bili-dl-list-item-index { color: var(--bdl-text-muted); font-size: 11px; min-width: 18px; text-align: right; }
+.bili-dl-list-item-meta { min-width: 0; display: grid; gap: 2px; }
+.bili-dl-list-item-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
+.bili-dl-list-item-meta small { color: var(--bdl-text-muted); font-size: 10px; }
+.bili-dl-list-status { margin: 9px 0 0; line-height: 1.5; }
+.bili-dl-list-status[data-type="error"] { color: var(--bdl-error-text); }
+.bili-dl-list-status[data-type="success"] { color: var(--bdl-success-text); }
+.bili-dl-list-empty { margin: 0; padding: 18px 10px; color: var(--bdl-text-muted); text-align: center; font-size: 12px; }
 
 #bili-dl-toggle {
   width: 64px;
@@ -122,6 +180,87 @@
   animation: none;
   /* 只保底高度、允许长到 max-height，多余内容在 .bili-dl-page 内滚动 */
   min-height: var(--bili-dl-sheet-min, 0px);
+}
+
+@media (max-width: 420px) {
+  #bili-dl-panel { right: 8px; bottom: 86px; }
+  #bili-dl-menu { width: calc(100vw - 16px); max-width: none; }
+  .bili-dl-mode-tabs, .bili-dl-list-body, .bili-dl-body { padding-left: 12px; padding-right: 12px; }
+  .bili-dl-list-tools { flex-wrap: wrap; }
+  .bili-dl-list-tools input { min-width: 180px; }
+}
+
+/* /list 页保留悬浮按钮空间；超出的内容由标签内容区滚动。 */
+#bili-dl-menu.is-list-page {
+  height: min(calc(100vh - 200px), 620px);
+  height: min(calc(100dvh - 200px), 620px);
+  max-height: min(calc(100vh - 200px), 620px);
+  max-height: min(calc(100dvh - 200px), 620px);
+}
+
+/* /list 页使用固定外框；滚动交给当前标签的内容视口，页脚始终可见。 */
+#bili-dl-menu.is-list-page #bili-dl-home {
+  overflow: hidden;
+}
+
+#bili-dl-menu.is-list-page .bili-dl-body,
+#bili-dl-menu.is-list-page .bili-dl-list-body {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#bili-dl-menu.is-list-page .bili-dl-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#bili-dl-menu.is-list-page .bili-dl-list-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#bili-dl-menu.is-list-page .bili-dl-list-items {
+  flex: 1 1 0%;
+  min-height: 92px;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#bili-dl-menu.is-list-page .bili-dl-list-head,
+#bili-dl-menu.is-list-page .bili-dl-list-tools,
+#bili-dl-menu.is-list-page #bili-dl-list-load-more,
+#bili-dl-menu.is-list-page #bili-dl-list-start,
+#bili-dl-menu.is-list-page #bili-dl-list-queue-cancel,
+#bili-dl-menu.is-list-page #bili-dl-list-retry-failed,
+#bili-dl-menu.is-list-page .bili-dl-list-status,
+#bili-dl-menu.is-list-page .bili-dl-list-body > .bili-dl-section {
+  flex: 0 0 auto;
+}
+
+/* 单视频下载只使用内容区这一根滚动条，任务卡本身不再制造嵌套滚动。 */
+#bili-dl-menu.is-list-page .bili-dl-body .bili-dl-job-list {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 列表下载同时显示清单和任务卡时，两块区域均保持可操作。 */
+#bili-dl-menu.is-list-page .bili-dl-list-body .bili-dl-job-list {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 180px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 @keyframes bili-dl-slide-up {
@@ -195,6 +334,8 @@
 }
 
 .bili-dl-body {
+  width: 100%;
+  box-sizing: border-box;
   padding: 14px 16px 16px;
   background: var(--bdl-bg);
 }
@@ -253,14 +394,45 @@
   margin-bottom: 12px;
 }
 
+.bili-dl-cover-column {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .bili-dl-cover-wrap {
   position: relative;
-  width: 96px;
+  width: 100%;
   height: 60px;
   border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;
   background: var(--bdl-border);
+}
+
+.bili-dl-cover-download {
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 4px;
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bili-dl-cover-download:hover:not(:disabled) {
+  border-color: var(--bdl-accent);
+  color: var(--bdl-accent);
+}
+
+.bili-dl-cover-download:disabled {
+  cursor: not-allowed;
+  color: var(--bdl-text-muted);
 }
 
 .bili-dl-cover {
@@ -578,8 +750,36 @@
   color: var(--bdl-text);
 }
 
-#bili-dl-queue-cancel {
+#bili-dl-queue-cancel,
+#bili-dl-list-queue-cancel {
   margin-top: 8px;
+}
+
+.bili-dl-quality-strategy-row,
+.bili-dl-filename-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 10px; color: var(--bdl-text-muted); font-size: 11px; }
+.bili-dl-quality-strategy-row select,
+.bili-dl-filename-row select { max-width: 210px; padding: 5px 8px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 11px; }
+.bili-dl-filename-preview { margin: -4px 0 8px; overflow: hidden; color: var(--bdl-text-muted); font-size: 11px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+/* 高级选项仍保留已保存的默认行为，常用下载面板不展示，避免打断主流程。 */
+.bili-dl-quality-strategy-row,
+.bili-dl-filename-row,
+.bili-dl-filename-preview { display: none; }
+.bili-dl-status-action {
+  margin: 0 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.bili-dl-status-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .bili-dl-job-list {
@@ -930,6 +1130,39 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+/* 面向普通下载流程隐藏高级诊断与会话任务入口。 */
+.bili-dl-footer-links [data-sheet="diagnostics"],
+.bili-dl-footer-links [data-sheet="tasks"] {
+  display: none !important;
+}
+
+.bili-dl-diagnostics-text {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--bdl-border);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.bili-dl-diagnostics-copy {
+  margin-top: 10px;
+}
+
+.bili-dl-task-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.bili-dl-task-filters button, .bili-dl-task-row button { padding: 5px 8px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 11px; cursor: pointer; }
+.bili-dl-task-filters button.active { background: var(--bdl-accent); border-color: var(--bdl-accent); color: var(--bdl-accent-contrast); }
+.bili-dl-task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--bdl-border); font-size: 12px; }
+.bili-dl-task-row strong, .bili-dl-task-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bili-dl-task-row span { color: var(--bdl-text-muted); grid-column: 1; }
+.bili-dl-task-row small { color: var(--bdl-text-muted); grid-column: 1; line-height: 1.35; }
+.bili-dl-task-row button { grid-column: 2; grid-row: 1 / span 2; }
 
 .bili-dl-page-back {
   appearance: none;

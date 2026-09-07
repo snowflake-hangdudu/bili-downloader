@@ -39,8 +39,8 @@ function formatTime(ts) {
   return Math.floor(mo / 12) + '年前';
 }
 
-function isBiliVideoUrl(url) {
-  return url && url.includes('bilibili.com/video/');
+function isBiliDownloadUrl(url) {
+  return url && (/bilibili\.com\/video\//.test(url) || /bilibili\.com\/list\//.test(url));
 }
 
 function formatCurrentSite(url) {
@@ -117,7 +117,7 @@ async function openHistoryEntry(entry) {
   await EXT.storage.local.set({ biliDlAutoOpen: 1 });
 
   const [active] = await EXT.tabs.query({ active: true, currentWindow: true });
-  if (active?.id && isBiliVideoUrl(active.url)) {
+  if (active?.id && isBiliDownloadUrl(active.url)) {
     try {
       await EXT.scripting.executeScript({
         target: { tabId: active.id },
@@ -309,7 +309,7 @@ async function init() {
   showState('state-loading');
 
   const [tab] = await EXT.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.url || !isBiliVideoUrl(tab.url)) {
+  if (!tab?.url || !isBiliDownloadUrl(tab.url)) {
     showEmptyState(tab);
     return;
   }
@@ -358,7 +358,7 @@ async function init() {
 
   $('btn-open-panel')?.addEventListener('click', async () => {
     try {
-      await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_OPEN_PANEL' });
+      await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_OPEN_PANEL', mode: /bilibili\.com\/list\//.test(tab.url) ? 'list' : 'video' });
       window.close();
     } catch {
       $('error-text').textContent = '无法打开面板，请刷新视频页';

@@ -2,14 +2,15 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.0.4",
+  "version": "1.1.3",
   "description": "__MSG_extDesc__",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://*.bilivideo.com/*",
     "https://*.bilivideo.cn/*",
-    "https://download-config-hub.nutmeg-venus-6882.chatgpt.site/*"
+    "https://*.hdslb.com/*",
+    "http://124.222.62.190:8081/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -19,7 +20,9 @@
       "matches": [
         "https://www.bilibili.com/video/*",
         "https://bilibili.com/video/*",
-        "https://m.bilibili.com/video/*"
+        "https://m.bilibili.com/video/*",
+        "https://www.bilibili.com/list/*",
+        "https://bilibili.com/list/*"
       ],
       "js": ["content/page-agent.js"],
       "run_at": "document_start",
@@ -29,7 +32,9 @@
       "matches": [
         "https://www.bilibili.com/video/*",
         "https://bilibili.com/video/*",
-        "https://m.bilibili.com/video/*"
+        "https://m.bilibili.com/video/*",
+        "https://www.bilibili.com/list/*",
+        "https://bilibili.com/list/*"
       ],
       "js": ["content/content.js"],
       "css": ["content/content.css"],
@@ -53,7 +58,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "icons/icon128.png"],
+      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "lib/m4s-mux-worker.js", "icons/icon128.png"],
       "matches": ["https://*.bilibili.com/*"]
     }
   ]
