@@ -32,6 +32,7 @@
   const MAX_SMALL_MERGE_WORKERS = 2;
   const mergeWorkerQueue = [];
   const activeMergeWorkers = new Map();
+  let acceptsMergeRequest = () => false;
 
   function isLargeMerge(job) {
     if (job?.mode && job.mode !== 'dash') return false;
@@ -46,6 +47,7 @@
     if (!job || job.finished) return;
     job.finished = true;
     clearTimeout(job.startTimer);
+    clearTimeout(job.stallTimer);
     try { job.worker?.terminate(); } catch { /* ignore */ }
     activeMergeWorkers.delete(job.jobId);
     const queuedIndex = mergeWorkerQueue.indexOf(job);
@@ -72,6 +74,10 @@
     }
     job.worker = worker;
     activeMergeWorkers.set(job.jobId, job);
+    const armStallWatchdog = () => {
+      clearTimeout(job.stallTimer);
+      job.stallTimer = setTimeout(() => finishMergeWorkerJob(job, { error: '合成长期无进展，已停止并释放资源，请重试' }), 180000);
+    };
     job.startTimer = setTimeout(() => {
       if (!job.ready) finishMergeWorkerJob(job, { error: 'WORKER_UNAVAILABLE: 合成 Worker 启动超时' });
     }, 8000);
@@ -81,6 +87,7 @@
       if (data.type === 'READY') {
         job.ready = true;
         clearTimeout(job.startTimer);
+        armStallWatchdog();
         try {
           worker.postMessage({ type: 'MERGE', jobId: job.jobId, videoBlob: job.videoBlob, audioBlob: job.audioBlob });
           // 发送给 Worker 后不再保留页面侧引用，降低内容脚本的峰值内存。
@@ -92,6 +99,7 @@
         return;
       }
       if (data.type === 'PROGRESS') {
+        armStallWatchdog();
         updateProgress?.('merge', 0, data.received, data.total, job.jobId, {
           elapsedMs: data.elapsedMs,
           etaMs: data.etaMs
@@ -123,7 +131,7 @@
   function requestWorkerMerge(data) {
     const jobId = String(data?.jobId || '');
     if (!jobId || !data?.videoBlob?.size || !data?.audioBlob?.size) return;
-    cancelWorkerMerge(jobId, false);
+    if (!acceptsMergeRequest(jobId) || activeMergeWorkers.has(jobId) || mergeWorkerQueue.some((job) => job.jobId === jobId)) return;
     const job = {
       jobId,
       videoBlob: data.videoBlob,
@@ -1344,6 +1352,10 @@
     /** 并行任务：每个 job 一张独立进度卡，可单独暂停/取消 */
     const PARALLEL_MAX = 3;
     const activeJobs = new Map();
+    acceptsMergeRequest = (jobId) => {
+      const job = activeJobs.get(jobId);
+      return Boolean(job && !job.cancelRequested && job.state === TASK_STATE.merging);
+    };
     let jobSeq = 0;
     const TASK_STATE = Object.freeze({
       queued: 'queued',
@@ -1425,9 +1437,12 @@
 
     function waitWhileQueuePaused() {
       if (!queuePaused || queueCancelled) return Promise.resolve();
-      return new Promise((resolve) => {
-        queuePauseWaiter = { resolve };
-      });
+      if (!queuePauseWaiter) {
+        let resolve;
+        const promise = new Promise((done) => { resolve = done; });
+        queuePauseWaiter = { resolve, promise };
+      }
+      return queuePauseWaiter.promise;
     }
 
     function resumeEntireQueue() {
@@ -1441,15 +1456,13 @@
     }
 
     function pauseEntireQueue() {
-      const merging = [...activeJobs.values()].some((job) => job.merging);
-      if (merging) {
-        const message = '正在合成，当前阶段无法暂停；可等待合成完成或取消整队。';
-        if (operationMode === 'list') setListStatus(message, 'error');
-        else showStatus('error', message);
-        return;
-      }
       queuePaused = true;
       agentSignal('PAUSE_DOWNLOAD');
+      if ([...activeJobs.values()].some((job) => job.merging || job.state === TASK_STATE.saving)) {
+        const message = '已暂停后续任务；当前合成或保存完成后，不再启动下一项。';
+        if (operationMode === 'list') setListStatus(message);
+        else showStatus('info', message);
+      }
       syncJobListVisibility();
     }
 
@@ -2122,169 +2135,109 @@
       }
     }
 
-    async function startQueueDownload() {
-      if (!canStartCurrentDownload() || !isMultiPartVideo(videoInfo.pages) || queueRunning) return;
-      if (activeJobs.size > 0) {
-        showStatus('error', '请先等当前并行下载结束，再使用分 P 队列');
-        return;
-      }
-      if (!(await ensureMuxReady())) return;
-
-      const total = videoInfo.pages.length;
-      const queueHref = location.href;
-      const qn = selectedQn;
-      const format = selectedFormat;
-      const label = format === 'm4a' ? '音频' : getSelectedQualityLabel();
-      const mode = qualities.find((q) => q.qn === qn)?.mode || 'durl';
-
+    async function startQueueDownload(retryPlan = null) {
+      if (queueRunning || activeJobs.size) return;
+      const isRetry = Array.isArray(retryPlan);
+      if (!isRetry && (!canStartCurrentDownload() || !isMultiPartVideo(videoInfo.pages))) return;
+      const plan = isRetry ? retryPlan.map((item) => ({ ...item })) : videoInfo.pages.map((_part, index) => ({
+        href: location.href, index, qn: selectedQn, format: selectedFormat,
+        label: selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel(),
+        mode: qualities.find((quality) => quality.qn === selectedQn)?.mode || 'durl'
+      }));
+      if (!plan.length) return;
+      // Lock before the first await: double-clicks must not start duplicate queues.
       queueRunning = true;
-      operationMode = 'video';
       queueCancelled = false;
       queuePaused = false;
+      operationMode = 'video';
       startBtn.disabled = true;
       queueBtn.disabled = true;
       queueLabelEl.textContent = '自动依次下载分 P…';
-      queueCancelBtn.disabled = false;
-      queueCancelBtn.textContent = '取消整队';
       statusEl.classList.add('hidden');
       syncJobListVisibility();
-
-      let ok = 0;
-      let fail = 0;
-      let nextIndex = 0;
-
-      async function runOnePart(i) {
-        if (queueCancelled) return;
-        const jobId = `part-${Date.now()}-${i}-${++jobSeq}`;
-        let partInfo;
-        try {
-          const res = await agentCall('RESOLVE_VIDEO', { href: queueHref, pageIndex: i });
-          partInfo = res.info;
-        } catch (err) {
-          fail++;
-          debugLog('队列', `P${i + 1} 解析失败: ${err.message}`);
-          return;
-        }
-
-        await waitWhileQueuePaused();
-        if (queueCancelled) return;
-
-        const job = createDownloadTask({
-          jobId,
-          scope: 'video',
-          info: partInfo,
-          qn,
-          format,
-          mode,
-          pageIndex: i,
-          label: `P${i + 1} · ${label}`
-        });
-        activeJobs.set(jobId, job);
-        mountJobCard(job);
-        updateProgress('prepare', 0, 0, 0, jobId);
-
-        const tryDownload = async () => {
-          await runSingleDownload(partInfo, { qn, format, jobId });
-        };
-
-        try {
-          await tryDownload();
-          ok++;
-          setTaskState(job, TASK_STATE.completed);
-          addHistory({
-            bvid: partInfo.bvid,
-            aid: partInfo.aid,
-            cid: partInfo.cid,
-            pageIndex: i,
-            title: partInfo.title,
-            label,
-            format,
-            ts: Date.now()
+      let ok = 0, cancelled = 0, nextIndex = 0;
+      const failed = [];
+      try {
+        if (!(await ensureMuxReady())) return;
+        async function runOnePart(entry) {
+          const job = createDownloadTask({
+            scope: 'video', format: entry.format, qn: entry.qn, mode: entry.mode,
+            pageIndex: entry.index, label: `P${entry.index + 1} · ${entry.label}`,
+            info: { title: `P${entry.index + 1}` }
           });
-        } catch (err) {
-          if (classifyDownloadError(err).type === 'cancelled' || queueCancelled) {
-            setTaskState(job, TASK_STATE.cancelled);
-            return;
-          }
-          job.attempts += 1;
-          debugLog('队列', `P${i + 1} 失败，1s 后重试: ${err.message}`);
-          updateProgress('queue', 0, 0, 0, jobId);
-          const phase = job.cardEl?.querySelector('.bili-dl-job-phase');
-          if (phase) phase.textContent = '重试中…';
-          await new Promise((r) => setTimeout(r, 1000));
-          await waitWhileQueuePaused();
-          if (queueCancelled) return;
+          activeJobs.set(job.jobId, job);
+          mountJobCard(job);
+          const check = async () => {
+            await waitWhileQueuePaused();
+            if (queueCancelled || job.cancelRequested) throw new Error('下载已取消');
+          };
           try {
-            await tryDownload();
-            ok++;
-            setTaskState(job, TASK_STATE.completed);
-            addHistory({
-              bvid: partInfo.bvid,
-              aid: partInfo.aid,
-              cid: partInfo.cid,
-              pageIndex: i,
-              title: partInfo.title,
-              label,
-              format,
-              ts: Date.now()
-            });
-          } catch (retryErr) {
-            if (classifyDownloadError(retryErr).type === 'cancelled' || queueCancelled) {
-              setTaskState(job, TASK_STATE.cancelled);
-              return;
+            for (let attempt = 0; attempt < 2; attempt++) {
+              await check();
+              try {
+                updateProgress('prepare', 0, 0, 0, job.jobId);
+                const result = await agentCall('RESOLVE_VIDEO', { href: entry.href, pageIndex: entry.index });
+                await check();
+                job.info = result.info;
+                const title = job.cardEl?.querySelector('.bili-dl-progress-title');
+                if (title) { title.textContent = job.info.title; title.title = job.info.title; }
+                await runSingleDownload(job.info, { qn: entry.qn, format: entry.format, jobId: job.jobId });
+                ok++;
+                setTaskState(job, TASK_STATE.completed);
+                await addHistory({ bvid: job.info.bvid, aid: job.info.aid, cid: job.info.cid,
+                  pageIndex: entry.index, title: job.info.title, label: entry.label, format: entry.format, ts: Date.now() });
+                return;
+              } catch (error) {
+                const problem = classifyDownloadError(error);
+                // Retrying an uncertain disk save could create a duplicate file.
+                if (attempt || problem.type !== 'network' || queueCancelled || job.cancelRequested) throw error;
+                job.attempts++;
+                updateProgress('queue', 0, 0, 0, job.jobId);
+                const phase = job.cardEl?.querySelector('.bili-dl-job-phase');
+                if (phase) phase.textContent = '网络失败，稍后重试…';
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+              }
             }
-            fail++;
-            const problem = classifyDownloadError(retryErr);
-            job.error = problem;
-            setTaskState(job, TASK_STATE.failed, problem.message);
-            debugLog('队列', `P${i + 1} 重试仍失败: ${problem.message}`);
+          } catch (error) {
+            const problem = classifyDownloadError(error);
+            if (problem.type === 'cancelled' || queueCancelled || job.cancelRequested) {
+              cancelled++;
+              setTaskState(job, TASK_STATE.cancelled);
+            } else {
+              failed.push({ ...entry, message: problem.message });
+              job.error = problem;
+              setTaskState(job, TASK_STATE.failed, problem.message);
+              debugLog('队列', `P${entry.index + 1} 失败：${problem.message}`);
+            }
+          } finally { removeJobCard(job.jobId); }
+        }
+        async function worker() {
+          while (nextIndex < plan.length && !queueCancelled) {
+            await waitWhileQueuePaused();
+            if (queueCancelled) break;
+            await runOnePart(plan[nextIndex++]);
           }
-        } finally {
-          removeJobCard(jobId);
         }
-      }
-
-      async function worker() {
-        while (!queueCancelled) {
-          await waitWhileQueuePaused();
-          if (queueCancelled) break;
-          const i = nextIndex++;
-          if (i >= total) break;
-          await runOnePart(i);
+        const workers = 1;
+        await Promise.all(Array.from({ length: workers }, () => worker()));
+        const counts = `成功 ${ok}，失败 ${failed.length}${cancelled ? `，取消 ${cancelled}` : ''}`;
+        showStatus(failed.length || queueCancelled ? 'error' : 'success',
+          `${queueCancelled ? '队列已取消' : '队列处理完成'}：${counts}${failed.length ? `。P${failed[0].index + 1}：${failed[0].message}` : ''}`);
+        if (failed.length) {
+          const retry = appendTextElement(statusEl, 'button', 'bili-dl-status-action', `仅重试失败的 ${failed.length} 项`);
+          retry.type = 'button';
+          retry.onclick = () => startQueueDownload(failed);
         }
+        if (ok) noteDownloadSuccessForRating();
+      } catch (error) {
+        showStatus('error', `队列停止：${error.message || error}`);
+      } finally {
+        queueRunning = false;
+        operationMode = null;
+        resetQueueCancelButton();
+        setQueueLabel(videoInfo?.pages?.length || plan.length);
+        refreshStartBtnForParallel();
       }
-
-      // 分 P 队列始终自动串行：当前文件已保存后才启动下一 P。
-      // 避免长合集同时占用多个 CDN 连接、浏览器下载槽位和内存，提升最终完成率。
-      const workers = 1;
-      await Promise.all(Array.from({ length: workers }, () => worker()));
-
-      queueRunning = false;
-      operationMode = null;
-      resetQueueCancelButton();
-
-      if (queueCancelled) {
-        showStatus('error', `队列已取消（已完成 ${ok}/${total}）`);
-      } else if (fail === 0) {
-        showStatus('success', `队列下载完成，共 ${ok} 个分 P`);
-        noteDownloadSuccessForRating();
-      } else if (ok === 0) {
-        showErrorWithFaq(
-          `全部失败（${fail} 个）。先播放视频 2～3 秒，或换 720P 后重试`,
-          'cdn-403'
-        );
-      } else {
-        showErrorWithFaq(
-          `部分完成：成功 ${ok}，失败 ${fail}。先播放 2～3 秒再重试，或换 720P`,
-          'parts'
-        );
-      }
-
-      setQueueLabel(total);
-      restoreStartButtonContent();
-      startBtn.disabled = !canStartCurrentDownload();
-      queueBtn.disabled = false;
-      refreshStartBtnForParallel();
     }
 
     async function startListDownload(retryTasks = null) {
@@ -2297,6 +2250,8 @@
         setListStatus('请先等待当前下载完成，再开始列表下载。', 'error');
         return;
       }
+      const queueQn = selectedQn;
+      const queueStrategy = qualityStrategy;
       queueRunning = true;
       operationMode = 'list';
       queueCancelled = false;
@@ -2328,14 +2283,15 @@
           mountJobCard(job);
           updateProgress('prepare', 0, 0, 0, jobId);
           try {
-            let qn = Number(retryTask?.requestedQn) || selectedQn;
+            let qn = Number(retryTask?.requestedQn) || queueQn;
             const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid });
             const available = qualityData.qualities || [];
-            if (!isRetry && qualityStrategy === 'highest' && available.length) {
+            if (!isRetry && queueStrategy === 'highest' && available.length) {
               qn = available.reduce((highest, quality) => Number(quality.qn) > Number(highest.qn) ? quality : highest, available[0]).qn;
             }
             const requested = available.find((quality) => quality.qn === qn);
-            const actualQuality = requested || available[0];
+            const actualQuality = requested || available.filter((quality) => Number(quality.qn) < Number(qn))
+              .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
             qn = actualQuality?.qn;
             if (!qn) throw new Error('该视频没有可下载的清晰度');
             const wasDowngraded = !requested;
@@ -2361,7 +2317,7 @@
               fail++;
               job.error = problem;
               setTaskState(job, TASK_STATE.failed, problem.message);
-              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || selectedQn, title: item.title, message: problem.message });
+              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, title: item.title, message: problem.message });
               debugLog('列表', `失败 ${index + 1}/${items.length}：${item.title} · ${problem.message}`);
             }
           } finally {

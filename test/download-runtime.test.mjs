@@ -7,7 +7,7 @@ const agent = await readFile(new URL('../content/page-agent.js', import.meta.url
 const content = await readFile(new URL('../content/content.js', import.meta.url), 'utf8');
 function harness(fetch) {
   const messages = [];
-  const context = vm.createContext({ Blob, AbortController, performance, fetch,
+  const context = vm.createContext({ Blob, AbortController, performance, fetch, setTimeout, clearTimeout,
     window: { postMessage: (m) => messages.push(m) }, AGENT: 'agent', PROGRESS_REPORT_INTERVAL_MS: 150,
     location: { href: 'https://www.bilibili.com/video/BVtest' },
     pickWorkingUrl: async (url) => url, isDownloadableCdnUrl: () => true,
@@ -61,6 +61,12 @@ test('pausing before CDN selection prevents network activity', async () => {
   assert.equal(calls, 0);
   c.resumeDownloadControl(s.jobId);
   assert.equal((await pending).size, 2048);
+});
+test('stalled network rejects and aborts its own track', async () => {
+  const { context: c } = harness();
+  const controller = new AbortController();
+  await assert.rejects(c.withStallTimeout(new Promise(() => {}), controller, 5), /无响应/);
+  assert.equal(controller.signal.aborted, true);
 });
 test('ignored resume Range restarts without duplicating bytes', async () => {
   let c, s, calls = 0;
@@ -133,6 +139,7 @@ test('merge rejects missing indexes and truncated boxes before entering remuxer'
     bytes.set([...type].map((char) => char.charCodeAt(0)), 4);
     return bytes;
   };
-  await assert.rejects(c.BiliM4sMux.validateFragmentedInput(new Blob([box('moov'), box('moof'), box('mdat')])), /索引不匹配/);
+  await assert.rejects(c.BiliM4sMux.validateFragmentedInput(new Blob([box('moov'), box('mdat')])), /索引不匹配/);
+  await assert.rejects(c.BiliM4sMux.validateFragmentedInput(new Blob([box('moof')])), /序号不连续/);
   await assert.rejects(c.BiliM4sMux.validateFragmentedInput(new Blob([box('mdat', 100)])), /不完整/);
 });

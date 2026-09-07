@@ -11,8 +11,8 @@
   --bdl-header-text: #111111;
   --bdl-success-bg: #f5f5f5;
   --bdl-success-text: #111111;
-  --bdl-error-bg: #f5f5f5;
-  --bdl-error-text: #111111;
+  --bdl-error-bg: #fff4f2;
+  --bdl-error-text: #a72c22;
   --bdl-radius: 6px;
   --bdl-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
 
@@ -39,8 +39,8 @@
     --bdl-header-text: #e6e6e6;
     --bdl-success-bg: #1b1b1b;
     --bdl-success-text: #e6e6e6;
-    --bdl-error-bg: #1b1b1b;
-    --bdl-error-text: #e6e6e6;
+    --bdl-error-bg: #331f20;
+    --bdl-error-text: #ffb4ab;
     --bdl-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
   }
 }

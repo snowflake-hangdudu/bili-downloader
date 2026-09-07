@@ -306,13 +306,18 @@
   }
 
   async function apiGet(apiPath) {
-    const res = await fetch('https://api.bilibili.com' + apiPath, {
-      credentials: 'include',
-      headers: { Referer: REFERER }
-    });
-    const json = await res.json();
-    if (json.code !== 0) throw new Error(json.message || 'API code=' + json.code);
-    return json.data;
+    const controller = new AbortController();
+    try {
+      return await withStallTimeout((async () => {
+        const res = await fetch('https://api.bilibili.com' + apiPath, {
+          credentials: 'include', headers: { Referer: REFERER }, signal: controller.signal
+        });
+        if (!res.ok) throw new Error('接口请求失败 HTTP ' + res.status);
+        const json = await res.json();
+        if (json.code !== 0) throw new Error((json.message || '接口错误') + ' (API code=' + json.code + ')');
+        return json.data;
+      })(), controller, 20000);
+    } finally { controller.abort(); }
   }
 
   async function resolveVideo(href, pageIndex) {
@@ -723,6 +728,7 @@
     const session = {
       jobId: id,
       paused: false,
+      pauseEpoch: 0,
       cancelled: cancelledBeforeStart.delete(id),
       abortController: null,
       controllers: {},
@@ -793,6 +799,7 @@
     for (const session of targets) {
       if (session.cancelled || session.paused || session.merging) continue;
       session.paused = true;
+      session.pauseEpoch++;
       const p = getDisplayProgress(session);
       sendProgress(session, 'paused', p.percent || 0, { received: p.received, total: p.total });
       abortSessionControllers(session);
@@ -813,6 +820,7 @@
 
   function cancelDownloadControl(jobId) {
     if (jobId && !sessions.has(jobId)) cancelledBeforeStart.add(jobId);
+    if (cancelledBeforeStart.size > 256) cancelledBeforeStart.delete(cancelledBeforeStart.values().next().value);
     const targets = jobId ? [sessions.get(jobId)].filter(Boolean) : [...sessions.values()];
     for (const session of targets) {
       session.cancelled = true;
@@ -822,6 +830,11 @@
         session.pauseWait = null;
       }
       abortSessionControllers(session);
+      const mergeWaiter = mergeWaiters.get(session.jobId);
+      if (mergeWaiter) {
+        mergeWaiters.delete(session.jobId);
+        mergeWaiter.reject(new Error('下载已取消'));
+      }
       window.postMessage({ source: AGENT, type: 'MERGE_CANCEL', jobId: session.jobId }, '*');
     }
   }
@@ -899,6 +912,7 @@
         while (true) {
           await waitWhilePaused(session);
           throwIfCancelled(session);
+          const pauseEpoch = session.pauseEpoch;
           session.abortController = new AbortController();
           session.controllers[trackId] = session.abortController;
           const headers = {};
@@ -906,16 +920,16 @@
 
           let res;
           try {
-            res = await fetch(working, {
+            res = await withStallTimeout(fetch(working, {
               credentials: 'omit',
               referrer: location.href,
               referrerPolicy: 'strict-origin-when-cross-origin',
               headers,
               signal: session.abortController.signal
-            });
+            }), session.controllers[trackId], 30000);
           } catch (e) {
             if (session.cancelled) throw new Error('下载已取消');
-            if (session.paused) {
+            if (session.paused || session.pauseEpoch !== pauseEpoch) {
               await waitWhilePaused(session);
               throwIfCancelled(session);
               continue;
@@ -954,10 +968,10 @@
               throwIfCancelled(session);
               let readResult;
               try {
-                readResult = await reader.read();
+                readResult = await withStallTimeout(reader.read(), session.controllers[trackId], 60000);
               } catch (e) {
                 if (session.cancelled) throw new Error('下载已取消');
-                if (session.paused) {
+                if (session.paused || session.pauseEpoch !== pauseEpoch) {
                   needResume = true;
                   break;
                 }
@@ -966,7 +980,7 @@
 
               const { done, value } = readResult;
               if (done) {
-                if (session.paused) needResume = true;
+                if (session.paused || session.pauseEpoch !== pauseEpoch) needResume = true;
                 break;
               }
 
@@ -999,9 +1013,22 @@
         if (e.message === '下载已取消') throw e;
         lastErr = e;
         log('下载', '失败 ' + (e.message || e));
+      } finally {
+        session.controllers[trackId]?.abort();
       }
     }
     throw new Error(formatDownloadError(lastErr || { message: '所有 CDN 镜像均不可用' }));
+  }
+
+  function withStallTimeout(promise, controller, milliseconds) {
+    let timer;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error('网络长时间无响应，请重试'));
+        controller?.abort();
+      }, milliseconds);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
   function mergeM4sInWorker(videoBlob, audioBlob, session) {
