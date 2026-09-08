@@ -344,8 +344,35 @@
       author: data.owner?.name || data.staff || '',
       view: data.stat?.view ?? 0,
       pubdate: data.pubdate || 0,
-      duration: page?.duration || data.duration || 0
+      duration: page?.duration || data.duration || 0,
+      collection: normalizeCollection(data.ugc_season)
     };
+  }
+
+  function normalizeCollection(season) {
+    if (!season?.sections) return null;
+    const seen = new Set();
+    const items = [];
+    for (const section of season.sections) {
+      for (const episode of section.episodes || []) {
+        const arc = episode.arc || {};
+        const item = normalizeListItem({ ...arc, ...episode,
+          aid: episode.aid || arc.aid,
+          bvid: episode.bvid || arc.bvid,
+          cid: episode.cid || episode.page?.cid || arc.cid,
+          title: episode.title || arc.title,
+          cover: arc.pic || episode.pic,
+          duration: episode.page?.duration || arc.duration,
+          views: arc.stat?.view,
+          pubtime: arc.pubdate
+        });
+        if (!item || seen.has(item.bvid)) continue;
+        seen.add(item.bvid);
+        items.push(item);
+      }
+    }
+    return items.length ? { title: season.title || '视频合集', total: Number(season.ep_count) || items.length,
+      items, hasMore: false, cursor: null, collection: true } : null;
   }
 
   function normalizeListItem(item) {
@@ -428,7 +455,12 @@
     };
   }
 
-  function resolveList() {
+  async function resolveList() {
+    if (/^\/video\//.test(location.pathname)) {
+      const info = await resolveVideo(location.href, 0);
+      if (!info.collection) throw new Error('当前视频未提供可下载的合集条目');
+      return info.collection;
+    }
     const state = window.__INITIAL_STATE__ || {};
     const resources = Array.isArray(state.resourceList) ? state.resourceList : [];
     const items = resources.map(normalizeListItem).filter(Boolean);
@@ -1272,7 +1304,7 @@
           reply(id, { type: 'OK', data: { info: await resolveVideo(e.data.href, e.data.pageIndex || 0) } });
           break;
         case 'RESOLVE_LIST':
-          reply(id, { type: 'OK', data: resolveList() });
+          reply(id, { type: 'OK', data: await resolveList() });
           break;
         case 'LOAD_LIST_PAGE':
           reply(id, { type: 'OK', data: await loadListPage(e.data.cursor) });

@@ -2,11 +2,13 @@
 
 Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页与 `/list/` 列表页下载，仅供个人学习使用。
 
-- 版本：1.1.7（批量串行下载版）
+- 版本：1.1.8（视频页合集下载版）
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
 ## 功能概览
+
+- 普通视频页右侧的合集也支持“列表下载”：读取视频接口提供的合集条目，复用勾选、串行下载、暂停/继续/取消功能，无 10 个选择限制。
 
 - 支持 B 站普通视频页（`/video/BV…`、`/video/av…`）和列表页（`/list/…`）；**不支持番剧页**
 - 右下角悬浮面板：清晰度 / 格式（MP4 视频 · M4A 音频）、最多 3 路并行进度卡、暂停/继续/取消

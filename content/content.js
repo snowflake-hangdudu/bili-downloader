@@ -637,6 +637,7 @@
     const infoBody = panel.querySelector('#bili-dl-info-body');
     const defaultStartBtnNodes = Array.from(startBtn.childNodes).map((node) => node.cloneNode(true));
     let listItems = [];
+    let collectionHref = '';
     let selectedListBvids = new Set();
     let listLoaded = false;
     let listCursor = null;
@@ -1068,7 +1069,7 @@
     };
 
     function isListPage() {
-      return /^\/list\//.test(location.pathname);
+      return /^\/list\//.test(location.pathname) || (collectionHref === location.href && Boolean(videoInfo?.collection?.items?.length));
     }
 
     function setListStatus(text, type = '') {
@@ -1178,7 +1179,7 @@
         listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
         listLoaded = true;
         renderListItems();
-        setListStatus(listItems.length ? '可选择已加载的视频；长列表请先向下滚动 B 站页面，再点“刷新”。' : '未读取到视频，请刷新页面后重试。');
+        setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '可选择已加载的视频；长列表请先向下滚动 B 站页面，再点“刷新”。') : '未读取到视频，请刷新页面后重试。');
         debugLog('列表', `已读取 ${listItems.length} 个视频`);
       } catch (error) {
         setListStatus(`列表读取失败：${error.message || error}`, 'error');
@@ -1809,8 +1810,14 @@
       appendTextElement(pillsEl, 'span', 'bili-dl-pill loading', '加载中');
 
       try {
+        const requestedHref = location.href;
         const snap = await fetchSnapshot();
+        if (requestedHref !== location.href) return;
         videoInfo = snap.info;
+        collectionHref = requestedHref;
+        modeTabsEl.classList.toggle('hidden', !isListPage());
+        menu.classList.toggle('is-list-page', isListPage());
+        if (!isListPage() && activeMode === 'list' && !operationMode) await setDownloadMode('video');
         setVideoLoading(false);
         titleEl.textContent = videoInfo.title;
         setDetect('已识别视频页面', true);
