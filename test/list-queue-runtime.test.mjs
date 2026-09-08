@@ -9,7 +9,7 @@ function harness(saveFailure = false) {
   const c = vm.createContext({ listItems: items, selectedListBvids: new Set(items.map(i => i.bvid)),
     queueRunning: false, queueCancelled: false, queuePaused: false, operationMode: null,
     selectedQn: 80, qualityStrategy: 'exact', streamPreference: 'high-bitrate', activeJobs: new Map(),
-    listStartBtn: {}, lastListFailures: [],
+    listStartBtn: {}, listItemsEl: { querySelectorAll: () => [] }, lastListFailures: [],
     updateListRetryFailed() {}, setListStatus() {}, waitWhileQueuePaused: async () => {},
     getSelectedQualityLabel: () => '1080P', createDownloadTask: x => x, mountJobCard() {}, updateProgress() {},
     agentCall: async () => ({ qualities: [{ qn: 80, label: '1080P' }] }),
@@ -32,4 +32,16 @@ test('disk save failure stops subsequent downloads and preserves unfinished item
   const h = harness(true); await h.c.startListDownload();
   assert.equal(h.stats().calls, 1); assert.equal(h.c.lastListFailures.length, 35);
   assert.equal(h.c.queueRunning, false); assert.equal(h.c.activeJobs.size, 0);
+});
+test('cancel before first item retains all pending items for retry', async () => {
+  const h = harness();
+  h.c.waitWhileQueuePaused = async () => { h.c.queueCancelled = true; };
+  await h.c.startListDownload();
+  assert.equal(h.stats().calls, 0);
+  assert.equal(h.c.lastListFailures.length, 35);
+  assert.equal(h.c.queueRunning, false);
+});
+test('successful queue deselects saved videos to avoid repeating them', async () => {
+  const h = harness(); await h.c.startListDownload();
+  assert.equal(h.c.selectedListBvids.size, 0);
 });

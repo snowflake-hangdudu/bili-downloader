@@ -2,7 +2,7 @@
 
 Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页与 `/list/` 列表页下载，仅供个人学习使用。
 
-- 版本：1.1.11（合集标题与全选样式优化）
+- 版本：1.1.12（合集切换与未完成任务恢复优化）
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 

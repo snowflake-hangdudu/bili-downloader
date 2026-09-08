@@ -1119,7 +1119,7 @@
       const count = lastListFailures.length;
       listRetryFailedBtn.classList.toggle('hidden', !count);
       listRetryFailedBtn.disabled = queueRunning;
-      listRetryFailedBtn.textContent = count ? `重试失败视频（${count}）` : '重试失败视频';
+      listRetryFailedBtn.textContent = count ? `重试未完成视频（${count}）` : '重试未完成视频';
     }
 
     function renderListItems() {
@@ -1185,11 +1185,13 @@
     async function loadListItems(force = false) {
       if (listLoading) return;
       if (listLoaded && !force) return;
+      const requestedHref = location.href;
       listLoading = true;
       updateListLoadMore();
       setListStatus(force ? '正在刷新列表…' : '正在读取视频列表…');
       try {
         const data = await agentCall('RESOLVE_LIST', {});
+        if (requestedHref !== location.href) return;
         listItems = Array.isArray(data.items) ? data.items : [];
         selectedListBvids = new Set(listItems.filter((item) => selectedListBvids.has(item.bvid)).map((item) => item.bvid));
         listCursor = data.cursor || null;
@@ -1202,11 +1204,13 @@
         setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '滚动 B 站页面加载更多视频后，重新进入“列表下载”即可更新。') : '未读取到视频，请刷新页面后重试。');
         debugLog('列表', `已读取 ${listItems.length} 个视频`);
       } catch (error) {
+        if (requestedHref !== location.href) return;
         setListStatus(`列表读取失败：${error.message || error}`, 'error');
         debugLog('列表', `读取失败：${error.message || error}`);
       } finally {
         listLoading = false;
         updateListLoadMore();
+        if (requestedHref !== location.href && activeMode === 'list' && !queueRunning) loadListItems(true);
       }
     }
 
@@ -1796,6 +1800,7 @@
       }
       const res = await agentCall('RESOLVE_VIDEO', { href: location.href, pageIndex });
       const qRes = await agentCall('GET_QUALITIES', { aid: res.info.aid, cid: res.info.cid });
+      if (key !== snapshotKey()) throw new Error('视频已切换，请稍后重试');
       snapshotCache = {
         info: res.info,
         qualities: qRes.qualities || [],
@@ -1808,6 +1813,7 @@
     }
 
     async function loadVideoInfo() {
+      const requestedHref = location.href;
       setDetect('识别页面中…', false);
       setVideoLoading(true);
       titleEl.textContent = '';
@@ -1823,7 +1829,6 @@
       appendTextElement(pillsEl, 'span', 'bili-dl-pill loading', '加载中');
 
       try {
-        const requestedHref = location.href;
         const snap = await fetchSnapshot();
         if (requestedHref !== location.href) return;
         videoInfo = snap.info;
@@ -1912,6 +1917,7 @@
 
         debugLog('加载', `${videoInfo.aid}/${videoInfo.cid} · ${snap.qualities.map((q) => q.label).join(', ')}`);
       } catch (err) {
+        if (requestedHref !== location.href) return;
         setDetect('识别失败', false);
         setVideoLoading(false);
         titleEl.textContent = '加载失败';
@@ -2304,6 +2310,7 @@
       let cancelled = 0;
       let downgraded = 0;
       const failedTasks = [];
+      let processed = 0;
       try {
         for (let index = 0; index < items.length; index++) {
           await waitWhileQueuePaused();
@@ -2345,6 +2352,10 @@
             if (result.videoOnly) throw new Error('只下载到无音频视频轨');
             ok++;
             if (wasDowngraded) downgraded++;
+            selectedListBvids.delete(item.bvid);
+            listItemsEl.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+              if (input.dataset.bvid === item.bvid) input.checked = false;
+            });
             setTaskState(job, TASK_STATE.completed);
             await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: actualLabel, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '文件已保存，历史记录写入失败：' + error.message));
             debugLog('列表', `完成 ${index + 1}/${items.length}：${item.title}`);
@@ -2352,6 +2363,7 @@
             const problem = classifyDownloadError(error);
             if (problem.type === 'cancelled') {
               cancelled++;
+              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, message: '已取消，可重试' });
               setTaskState(job, TASK_STATE.cancelled);
               debugLog('列表', `已取消 ${index + 1}/${items.length}：${item.title}`);
             } else {
@@ -2363,18 +2375,25 @@
             }
           } finally {
             removeJobCard(jobId);
+            processed = index + 1;
           }
           if (job.error?.type === 'save') {
             for (const pendingItem of items.slice(index + 1)) {
               failedTasks.push({ item: pendingItem, requestedQn: queueQn, message: '保存异常后未开始，可重试' });
             }
             setListStatus('保存异常，已停止后续下载；检查磁盘和浏览器下载记录后，可重试未完成视频。', 'error');
+            processed = items.length;
             break;
           }
           // Give the browser a rendering/cleanup turn between full media jobs.
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       } finally {
+        if (queueCancelled) {
+          for (const pendingItem of items.slice(processed)) {
+            failedTasks.push({ item: pendingItem, requestedQn: queueQn, message: '队列取消后未开始，可重试' });
+          }
+        }
         queueRunning = false;
         operationMode = null;
         resetQueueCancelButton();
@@ -2386,7 +2405,7 @@
       if (queueCancelled) setListStatus(`列表下载已取消：已保存 ${ok}/${items.length} 个视频`, 'error');
       else if (fail || cancelled) {
         const firstReason = failedTasks[0]?.message;
-        setListStatus(`队列已结束：成功 ${ok}，失败 ${fail}，未开始 ${Math.max(0, failedTasks.length - fail)}，已取消 ${cancelled}${downgraded ? `，清晰度降级 ${downgraded}` : ''}${firstReason ? `；原因：${firstReason}` : ''}`, fail ? 'error' : 'success');
+        setListStatus(`队列已结束：成功 ${ok}，失败 ${fail}，未开始 ${Math.max(0, failedTasks.length - fail - cancelled)}，已取消 ${cancelled}${downgraded ? `，清晰度降级 ${downgraded}` : ''}${firstReason ? `；原因：${firstReason}` : ''}`, fail ? 'error' : 'success');
       }
       else setListStatus(`列表下载完成：已保存 ${ok} 个视频${downgraded ? `（${downgraded} 个清晰度降级）` : ''}`, 'success');
       if (ok) {
