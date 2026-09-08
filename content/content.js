@@ -537,8 +537,8 @@
               </select>
             </div>
             <div id="bili-dl-list-head" class="bili-dl-list-head">
-              <strong id="bili-dl-list-title">视频列表</strong>
-              <span><span id="bili-dl-list-count"></span> <button id="bili-dl-list-select-all" type="button" title="选择当前已加载的所有视频">全选</button> <button id="bili-dl-list-refresh" type="button">刷新</button></span>
+              <div class="bili-dl-list-heading"><strong id="bili-dl-list-title">视频列表</strong><span id="bili-dl-list-count"></span></div>
+              <button id="bili-dl-list-select-all" type="button" title="选择当前已加载的所有视频">全选</button>
             </div>
             <div id="bili-dl-list-items" class="bili-dl-list-items"></div>
             <button id="bili-dl-list-load-more" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">继续加载</button>
@@ -591,7 +591,6 @@
     const listHeadEl = panel.querySelector('#bili-dl-list-head');
     const listTitleEl = panel.querySelector('#bili-dl-list-title');
     const listCountEl = panel.querySelector('#bili-dl-list-count');
-    const listRefreshBtn = panel.querySelector('#bili-dl-list-refresh');
     const listSelectAllBtn = panel.querySelector('#bili-dl-list-select-all');
     const listItemsEl = panel.querySelector('#bili-dl-list-items');
     const listSearchEl = panel.querySelector('#bili-dl-list-search');
@@ -1192,14 +1191,15 @@
       try {
         const data = await agentCall('RESOLVE_LIST', {});
         listItems = Array.isArray(data.items) ? data.items : [];
-        selectedListBvids = new Set();
+        selectedListBvids = new Set(listItems.filter((item) => selectedListBvids.has(item.bvid)).map((item) => item.bvid));
         listCursor = data.cursor || null;
         listHasMore = !!data.hasMore;
         listTitleEl.textContent = data.title || '视频列表';
+        listTitleEl.title = data.title || '视频列表';
         listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
         listLoaded = true;
         renderListItems();
-        setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '可选择已加载的视频；长列表请先向下滚动 B 站页面，再点“刷新”。') : '未读取到视频，请刷新页面后重试。');
+        setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '滚动 B 站页面加载更多视频后，重新进入“列表下载”即可更新。') : '未读取到视频，请刷新页面后重试。');
         debugLog('列表', `已读取 ${listItems.length} 个视频`);
       } catch (error) {
         setListStatus(`列表读取失败：${error.message || error}`, 'error');
@@ -1251,7 +1251,7 @@
         button.setAttribute('aria-selected', String(active));
       });
       homeEl.scrollTop = 0;
-      if (mode === 'list') await loadListItems();
+      if (mode === 'list') await loadListItems(!queueRunning);
     }
 
     function showErrorWithFaq(text, anchor) {
@@ -2449,7 +2449,6 @@
     listQueueCancelBtn.onclick = cancelEntireQueue;
     listStartBtn.onclick = startListDownload;
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);
-    listRefreshBtn.onclick = () => loadListItems(true);
     listSelectAllBtn.onclick = () => {
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       if (allSelected) selectedListBvids.clear();

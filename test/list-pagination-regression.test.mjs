@@ -13,7 +13,7 @@ assert.match(agent, /case 'LOAD_LIST_PAGE'/);
 assert.match(agent, /hasMore: data\.has_more === true/);
 assert.match(content, /id="bili-dl-list-load-more"/);
 assert.doesNotMatch(content, /listItemsEl\.addEventListener\('scroll', scheduleListAutoLoad/);
-assert.match(content, /长列表请先向下滚动 B 站页面，再点“刷新”/);
+assert.match(content, /重新进入“列表下载”即可更新/);
 assert.match(content, /id="bili-dl-list-search"/);
 assert.match(content, /data-list-filter="selected"/);
 assert.match(content, /listFilter === 'selected'/);

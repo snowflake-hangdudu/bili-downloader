@@ -99,6 +99,15 @@
 .bili-dl-list-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 13px; }
 .bili-dl-list-head span, .bili-dl-list-status { color: var(--bdl-text-muted); font-size: 11px; }
 .bili-dl-list-head button { margin-left: 4px; padding: 0; border: 0; background: transparent; color: var(--bdl-accent); font-size: 11px; cursor: pointer; }
+.bili-dl-list-head { align-items: center; }
+.bili-dl-list-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#bili-dl-list-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 20px; }
+#bili-dl-list-count { line-height: 16px; }
+#bili-dl-list-select-all { flex: 0 0 auto; min-width: 72px; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bdl-border); border-radius: 8px; background: var(--bdl-surface); color: var(--bdl-text); font-weight: 600; white-space: nowrap; }
+#bili-dl-list-select-all:hover { background: #f0f0f0; }
+#bili-dl-list-select-all[aria-pressed="true"] { background: #111; border-color: #111; color: #fff; }
+#bili-dl-list-select-all:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
+#bili-dl-list-select-all:disabled { opacity: .45; cursor: default; }
 .bili-dl-list-items { max-height: 210px; overflow: auto; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); margin-bottom: 10px; }
 .bili-dl-list-item { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--bdl-border); cursor: pointer; }
 .bili-dl-list-item:last-child { border-bottom: 0; }
