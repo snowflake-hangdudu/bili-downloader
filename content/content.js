@@ -182,11 +182,15 @@
     const loadScript = (file) => new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = base + file;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('加载失败: ' + file));
+      const timer = setTimeout(() => { s.remove(); reject(new Error('合成组件加载超时: ' + file)); }, 10000);
+      s.onload = () => { clearTimeout(timer); resolve(); };
+      s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('合成组件加载失败: ' + file)); };
       (document.documentElement || document.head).appendChild(s);
     });
-    muxReadyPromise = loadScript('mp4-remux.iife.js').then(() => loadScript('m4s-mux.js'));
+    muxReadyPromise = loadScript('mp4-remux.iife.js').then(() => loadScript('m4s-mux.js')).catch((error) => {
+      muxReadyPromise = null;
+      throw error;
+    });
     return muxReadyPromise;
   }
 
@@ -199,6 +203,8 @@
       const started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
       if (!started?.ok) throw new Error(started?.error || '无法创建浏览器下载');
       downloadId = started.downloadId;
+      let lastBytes = -1;
+      let lastProgressAt = Date.now();
       for (;;) {
         if (shouldCancel()) {
           await EXT.runtime.sendMessage({ type: 'BILI_DL_CANCEL_MEDIA', downloadId });
@@ -208,6 +214,13 @@
         if (!result?.ok) throw new Error(result?.error || '无法确认保存结果，请检查浏览器下载记录');
         if (result.state === 'complete') return downloadId;
         if (result.state === 'interrupted') throw new Error('浏览器保存失败：' + (result.error || '下载中断'));
+        if (Number(result.bytesReceived || 0) !== lastBytes) {
+          lastBytes = Number(result.bytesReceived || 0);
+          lastProgressAt = Date.now();
+        } else if (Date.now() - lastProgressAt > 180000) {
+          await EXT.runtime.sendMessage({ type: 'BILI_DL_CANCEL_MEDIA', downloadId });
+          throw new Error('浏览器保存长时间无进展，已停止；请检查磁盘空间和浏览器下载记录');
+        }
         // Poll only while a native save is active; no idle/background-page polling.
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
@@ -675,7 +688,8 @@
       if (!job || job.recorded || ![TASK_STATE.completed, TASK_STATE.failed, TASK_STATE.cancelled].includes(job.state)) return;
       job.recorded = true;
       const finishedAt = Date.now();
-      taskHistory.unshift({ ...job, info: { ...job.info }, phaseTimes: { ...job.phaseTimes }, finishedAt, elapsedMs: finishedAt - job.createdAt });
+      const { cardEl, blob, mp4, ...metadata } = job;
+      taskHistory.unshift({ ...metadata, info: { ...job.info }, phaseTimes: { ...job.phaseTimes }, finishedAt, elapsedMs: finishedAt - job.createdAt });
       if (taskHistory.length > 50) taskHistory.length = 50;
     }
 
@@ -1069,7 +1083,7 @@
     };
 
     function isListPage() {
-      return /^\/list\//.test(location.pathname) || (collectionHref === location.href && Boolean(videoInfo?.collection?.items?.length));
+      return /^\/list\//.test(location.pathname) || (collectionHref && new URL(collectionHref).pathname === location.pathname && Boolean(videoInfo?.collection?.items?.length));
     }
 
     function setListStatus(text, type = '') {
@@ -1129,6 +1143,7 @@
         label.className = 'bili-dl-list-item';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.dataset.bvid = item.bvid;
         checkbox.checked = selectedListBvids.has(item.bvid);
         checkbox.addEventListener('change', () => {
           if (checkbox.checked) {
@@ -1169,6 +1184,7 @@
     }
 
     async function loadListItems(force = false) {
+      if (listLoading) return;
       if (listLoaded && !force) return;
       listLoading = true;
       updateListLoadMore();
@@ -1218,13 +1234,6 @@
     }
 
     async function setDownloadMode(mode) {
-      if (mode === 'list' && !isListPage()) return;
-      if (operationMode && mode !== operationMode) {
-        const text = operationMode === 'list' ? '列表下载进行中，请在当前页签查看进度或取消任务。' : '单视频下载进行中，请完成或取消后再切换页签。';
-        if (activeMode === 'list') setListStatus(text, 'error');
-        else showStatus('error', text);
-        return;
-      }
       activeMode = mode;
       videoBodyEl.classList.toggle('hidden', mode === 'list');
       listBodyEl.classList.toggle('hidden', mode !== 'list');
@@ -2290,7 +2299,6 @@
       queuePaused = false;
       listStartBtn.disabled = true;
       updateListRetryFailed();
-      await setupMuxInPage().catch(() => {});
       let ok = 0;
       let fail = 0;
       let cancelled = 0;
@@ -2332,12 +2340,13 @@
             job.label = `列表 · ${actualLabel}${wasDowngraded ? '（降级）' : ''}`;
             const labelEl = job.cardEl?.querySelector('.bili-dl-progress-q');
             if (labelEl) labelEl.textContent = job.label;
+            if (actualQuality.mode === 'dash') await setupMuxInPage();
             const result = await runSingleDownload(item, { qn, format: 'mp4', streamPreference: queueStreamPreference, jobId });
             if (result.videoOnly) throw new Error('只下载到无音频视频轨');
             ok++;
             if (wasDowngraded) downgraded++;
             setTaskState(job, TASK_STATE.completed);
-            await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: actualLabel, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() });
+            await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: actualLabel, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '文件已保存，历史记录写入失败：' + error.message));
             debugLog('列表', `完成 ${index + 1}/${items.length}：${item.title}`);
           } catch (error) {
             const problem = classifyDownloadError(error);
@@ -2355,6 +2364,15 @@
           } finally {
             removeJobCard(jobId);
           }
+          if (job.error?.type === 'save') {
+            for (const pendingItem of items.slice(index + 1)) {
+              failedTasks.push({ item: pendingItem, requestedQn: queueQn, message: '保存异常后未开始，可重试' });
+            }
+            setListStatus('保存异常，已停止后续下载；检查磁盘和浏览器下载记录后，可重试未完成视频。', 'error');
+            break;
+          }
+          // Give the browser a rendering/cleanup turn between full media jobs.
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       } finally {
         queueRunning = false;
@@ -2368,7 +2386,7 @@
       if (queueCancelled) setListStatus(`列表下载已取消：已保存 ${ok}/${items.length} 个视频`, 'error');
       else if (fail || cancelled) {
         const firstReason = failedTasks[0]?.message;
-        setListStatus(`列表下载完成：成功 ${ok}，失败 ${fail}，已取消 ${cancelled}${downgraded ? `，清晰度降级 ${downgraded}` : ''}${firstReason ? `；首个失败原因：${firstReason}` : ''}`, fail ? 'error' : 'success');
+        setListStatus(`队列已结束：成功 ${ok}，失败 ${fail}，未开始 ${Math.max(0, failedTasks.length - fail)}，已取消 ${cancelled}${downgraded ? `，清晰度降级 ${downgraded}` : ''}${firstReason ? `；原因：${firstReason}` : ''}`, fail ? 'error' : 'success');
       }
       else setListStatus(`列表下载完成：已保存 ${ok} 个视频${downgraded ? `（${downgraded} 个清晰度降级）` : ''}`, 'success');
       if (ok) {
@@ -2436,7 +2454,11 @@
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       if (allSelected) selectedListBvids.clear();
       else listItems.forEach((item) => selectedListBvids.add(item.bvid));
-      renderListItems();
+      if (listFilter === 'selected') renderListItems();
+      else {
+        listItemsEl.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = selectedListBvids.has(input.dataset.bvid); });
+        updateListSelection();
+      }
     };
     listSearchEl.oninput = () => {
       listQuery = listSearchEl.value.slice(0, 80);
@@ -2454,7 +2476,10 @@
       };
     });
     modeTabsEl.querySelectorAll('[data-mode]').forEach((button) => {
-      button.onclick = () => setDownloadMode(button.dataset.mode);
+      button.onclick = () => setDownloadMode(button.dataset.mode).catch((error) => {
+        setListStatus(`切换失败：${error.message || error}`, 'error');
+        debugLog('列表', error.message || String(error));
+      });
     });
 
     formatPillsEl.querySelectorAll('.bili-dl-pill[data-format]').forEach((btn) => {

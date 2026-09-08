@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       // Re-check ownership after service-worker restarts; never expose other downloads.
       if (!item || item.byExtensionId !== chrome.runtime.id) throw new Error('下载记录不可用，请打开浏览器下载记录检查');
       if (msg.type === 'BILI_DL_CANCEL_MEDIA' && item.state === 'in_progress') await chrome.downloads.cancel(item.id);
-      return { ok: true, state: item.state, error: item.error || '' };
+      return { ok: true, state: item.state, error: item.error || '', bytesReceived: item.bytesReceived || 0 };
     })().then(sendResponse, (error) => sendResponse({ ok: false, error: String(error.message || error) }));
     return true;
   }
