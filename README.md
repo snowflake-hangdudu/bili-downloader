@@ -2,11 +2,13 @@
 
 Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页与 `/list/` 列表页下载，仅供个人学习使用。
 
-- 版本：1.1.8（视频页合集下载版）
+- 版本：1.1.9（合集全选版）
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
 ## 功能概览
+
+- 固定高码率优先，隐藏视频质量偏好选项；列表及合集支持全选/取消全选当前已加载视频。
 
 - 普通视频页右侧的合集也支持“列表下载”：读取视频接口提供的合集条目，复用勾选、串行下载、暂停/继续/取消功能，无 10 个选择限制。
 

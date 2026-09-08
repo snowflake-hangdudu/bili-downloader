@@ -766,6 +766,7 @@
 .bili-dl-quality-strategy-row,
 .bili-dl-filename-row,
 .bili-dl-filename-preview { display: none; }
+.bili-dl-stream-preference-row { display: none !important; }
 .bili-dl-status-action {
   margin: 0 8px 0 0;
   padding: 0;

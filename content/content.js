@@ -244,7 +244,7 @@
   let selectedFormat = 'mp4'; // 'mp4' | 'm4a'
   let qualityStrategy = 'exact'; // exact | highest
   // Selects among Bilibili's existing streams of the same resolution; never re-encodes.
-  let streamPreference = 'high-bitrate'; // high-bitrate | compatible
+  const streamPreference = 'high-bitrate';
   let filenameStyle = 'title-bvid-quality';
   let pageIndex = 0;
   let isOpen = false;
@@ -525,7 +525,7 @@
             </div>
             <div id="bili-dl-list-head" class="bili-dl-list-head">
               <strong id="bili-dl-list-title">视频列表</strong>
-              <span><span id="bili-dl-list-count"></span> <button id="bili-dl-list-refresh" type="button">刷新</button></span>
+              <span><span id="bili-dl-list-count"></span> <button id="bili-dl-list-select-all" type="button" title="选择当前已加载的所有视频">全选</button> <button id="bili-dl-list-refresh" type="button">刷新</button></span>
             </div>
             <div id="bili-dl-list-items" class="bili-dl-list-items"></div>
             <button id="bili-dl-list-load-more" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">继续加载</button>
@@ -579,6 +579,7 @@
     const listTitleEl = panel.querySelector('#bili-dl-list-title');
     const listCountEl = panel.querySelector('#bili-dl-list-count');
     const listRefreshBtn = panel.querySelector('#bili-dl-list-refresh');
+    const listSelectAllBtn = panel.querySelector('#bili-dl-list-select-all');
     const listItemsEl = panel.querySelector('#bili-dl-list-items');
     const listSearchEl = panel.querySelector('#bili-dl-list-search');
     const listFilterEl = panel.querySelector('.bili-dl-list-filter');
@@ -1046,7 +1047,6 @@
         if (prefs.format === 'mp4' || prefs.format === 'm4a') setFormat(prefs.format);
         if (Number(prefs.qn) > 0) selectedQn = Number(prefs.qn);
         if (prefs.qualityStrategy === 'highest' || prefs.qualityStrategy === 'exact') qualityStrategy = prefs.qualityStrategy;
-        if (prefs.streamPreference === 'compatible' || prefs.streamPreference === 'high-bitrate') streamPreference = prefs.streamPreference;
         if (['title', 'title-bvid', 'title-bvid-quality', 'detailed'].includes(prefs.filenameStyle)) filenameStyle = prefs.filenameStyle;
         qualityStrategyEls.forEach((el) => { el.value = qualityStrategy; });
         streamPreferenceEls.forEach((el) => { el.value = streamPreference; });
@@ -1087,6 +1087,10 @@
       const count = selectedListBvids.size;
       listStartBtn.disabled = !count || queueRunning;
       listStartBtn.textContent = count ? `下载已选 ${count} 个视频` : '下载已选视频';
+      const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
+      listSelectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+      listSelectAllBtn.disabled = !listItems.length;
+      listSelectAllBtn.setAttribute('aria-pressed', String(allSelected));
     }
 
     function updateListLoadMore() {
@@ -1997,7 +2001,7 @@
     async function runSingleDownload(info, opts = {}) {
       const format = opts.format || selectedFormat;
       const qn = opts.qn != null ? opts.qn : selectedQn;
-      const streamSelection = opts.streamPreference || streamPreference;
+      const streamSelection = streamPreference;
       const jobId = opts.jobId || null;
       const shouldCancel = () => Boolean(activeJobs.get(jobId)?.cancelRequested || (queueRunning && queueCancelled));
       await waitWhileQueuePaused();
@@ -2428,6 +2432,12 @@
     listStartBtn.onclick = startListDownload;
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);
     listRefreshBtn.onclick = () => loadListItems(true);
+    listSelectAllBtn.onclick = () => {
+      const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
+      if (allSelected) selectedListBvids.clear();
+      else listItems.forEach((item) => selectedListBvids.add(item.bvid));
+      renderListItems();
+    };
     listSearchEl.oninput = () => {
       listQuery = listSearchEl.value.slice(0, 80);
       renderListItems();
@@ -2455,14 +2465,6 @@
         qualityStrategy = el.value === 'highest' ? 'highest' : 'exact';
         qualityStrategyEls.forEach((item) => { item.value = qualityStrategy; });
         renderQualityPills(qualities);
-        saveDownloadPrefs();
-      };
-    });
-    streamPreferenceEls.forEach((el) => {
-      el.onchange = () => {
-        streamPreference = el.value === 'compatible' ? 'compatible' : 'high-bitrate';
-        streamPreferenceEls.forEach((item) => { item.value = streamPreference; });
-        refreshEstimate();
         saveDownloadPrefs();
       };
     });
