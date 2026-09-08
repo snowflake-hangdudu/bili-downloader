@@ -1127,11 +1127,6 @@
         checkbox.checked = selectedListBvids.has(item.bvid);
         checkbox.addEventListener('change', () => {
           if (checkbox.checked) {
-            if (selectedListBvids.size >= 10) {
-              checkbox.checked = false;
-              setListStatus('为避免下载过载，列表下载最多选择 10 个视频。', 'error');
-              return;
-            }
             selectedListBvids.add(item.bvid);
           } else selectedListBvids.delete(item.bvid);
           updateListSelection();
@@ -1183,7 +1178,7 @@
         listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
         listLoaded = true;
         renderListItems();
-        setListStatus(listItems.length ? '最多选择 10 个视频；请先向下滚动 B 站页面列表，再点“刷新”。' : '未读取到视频，请刷新页面后重试。');
+        setListStatus(listItems.length ? '可选择已加载的视频；长列表请先向下滚动 B 站页面，再点“刷新”。' : '未读取到视频，请刷新页面后重试。');
         debugLog('列表', `已读取 ${listItems.length} 个视频`);
       } catch (error) {
         setListStatus(`列表读取失败：${error.message || error}`, 'error');
@@ -1206,7 +1201,7 @@
         listHasMore = !!data.hasMore && added > 0;
         listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
         renderListItems();
-        setListStatus(added ? `已加载 ${added} 个；最多选择 10 个视频。` : '没有更多可加载的视频。');
+        setListStatus(added ? `已加载 ${added} 个视频，可继续选择。` : '没有更多可加载的视频。');
         debugLog('列表', `分页加载 ${added} 个，累计 ${listItems.length} 个`);
       } catch (error) {
         setListStatus(`继续加载失败：${error.message || error}`, 'error');
