@@ -756,9 +756,11 @@
 }
 
 .bili-dl-quality-strategy-row,
-.bili-dl-filename-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 10px; color: var(--bdl-text-muted); font-size: 11px; }
+.bili-dl-filename-row,
+.bili-dl-stream-preference-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 10px; color: var(--bdl-text-muted); font-size: 11px; }
 .bili-dl-quality-strategy-row select,
-.bili-dl-filename-row select { max-width: 210px; padding: 5px 8px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 11px; }
+.bili-dl-filename-row select,
+.bili-dl-stream-preference-row select { max-width: 210px; padding: 5px 8px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 11px; }
 .bili-dl-filename-preview { margin: -4px 0 8px; overflow: hidden; color: var(--bdl-text-muted); font-size: 11px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 /* 高级选项仍保留已保存的默认行为，常用下载面板不展示，避免打断主流程。 */
 .bili-dl-quality-strategy-row,

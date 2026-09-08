@@ -9,7 +9,7 @@ function queueHarness(overrides = {}) {
   const c = vm.createContext({
     queueRunning: false, queueCancelled: false, queuePaused: false, operationMode: null,
     activeJobs: new Map(), videoInfo: { pages: [{}, {}, {}] }, location: { href: 'https://www.bilibili.com/video/BVoriginal' },
-    selectedQn: 64, selectedFormat: 'mp4', qualities: [],
+    selectedQn: 64, selectedFormat: 'mp4', streamPreference: 'high-bitrate', qualities: [],
     startBtn: {}, queueBtn: {}, queueLabelEl: {}, statusEl: { classList: { add() {} } },
     canStartCurrentDownload: () => true, isMultiPartVideo: () => true, getSelectedQualityLabel: () => '720P',
     syncJobListVisibility() {}, ensureMuxReady: async () => true, waitWhileQueuePaused: async () => {},

@@ -243,6 +243,8 @@
   let selectedQn = 0;
   let selectedFormat = 'mp4'; // 'mp4' | 'm4a'
   let qualityStrategy = 'exact'; // exact | highest
+  // Selects among Bilibili's existing streams of the same resolution; never re-encodes.
+  let streamPreference = 'high-bitrate'; // high-bitrate | compatible
   let filenameStyle = 'title-bvid-quality';
   let pageIndex = 0;
   let isOpen = false;
@@ -456,6 +458,12 @@
                 <button type="button" class="bili-dl-pill" data-format="m4a">M4A 音频</button>
               </div>
             </div>
+            <label class="bili-dl-stream-preference-row">视频质量
+              <select id="bili-dl-stream-preference" aria-label="视频流选择偏好" title="仅在同一清晰度的原始视频流之间选择">
+                <option value="high-bitrate">高码率优先（推荐）</option>
+                <option value="compatible">兼容优先</option>
+              </select>
+            </label>
             <label class="bili-dl-filename-row">文件名
               <select id="bili-dl-filename-style" aria-label="下载文件名规则">
                 <option value="title">仅标题</option>
@@ -497,6 +505,12 @@
                 </select>
               </label>
             </div>
+            <label class="bili-dl-stream-preference-row">视频质量
+              <select id="bili-dl-list-stream-preference" aria-label="列表视频流选择偏好" title="仅在同一清晰度的原始视频流之间选择">
+                <option value="high-bitrate">高码率优先（推荐）</option>
+                <option value="compatible">兼容优先</option>
+              </select>
+            </label>
             <div class="bili-dl-list-tools" role="search">
               <input id="bili-dl-list-search" type="search" maxlength="80" placeholder="搜索已加载视频标题" aria-label="搜索已加载视频标题">
               <div class="bili-dl-list-filter" role="group" aria-label="列表筛选">
@@ -592,6 +606,10 @@
     const qualityStrategyEls = [
       panel.querySelector('#bili-dl-quality-strategy'),
       panel.querySelector('#bili-dl-list-quality-strategy')
+    ].filter(Boolean);
+    const streamPreferenceEls = [
+      panel.querySelector('#bili-dl-stream-preference'),
+      panel.querySelector('#bili-dl-list-stream-preference')
     ].filter(Boolean);
     const formatPillsEl = panel.querySelector('#bili-dl-format-pills');
     const formatRowEl = panel.querySelector('#bili-dl-format-row');
@@ -985,7 +1003,7 @@
     }
 
     function saveDownloadPrefs() {
-      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, filenameStyle } }).catch(() => {});
+      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, streamPreference, filenameStyle } }).catch(() => {});
     }
 
     function setFormat(fmt) {
@@ -995,6 +1013,7 @@
       });
       const isAudio = fmt === 'm4a';
       if (qualitySection) qualitySection.classList.toggle('hidden', isAudio);
+      streamPreferenceEls.forEach((el) => el.closest('.bili-dl-stream-preference-row')?.classList.toggle('hidden', isAudio));
       refreshStartBtnForParallel();
       refreshEstimate();
       refreshFilenamePreview();
@@ -1026,8 +1045,10 @@
         if (prefs.format === 'mp4' || prefs.format === 'm4a') setFormat(prefs.format);
         if (Number(prefs.qn) > 0) selectedQn = Number(prefs.qn);
         if (prefs.qualityStrategy === 'highest' || prefs.qualityStrategy === 'exact') qualityStrategy = prefs.qualityStrategy;
+        if (prefs.streamPreference === 'compatible' || prefs.streamPreference === 'high-bitrate') streamPreference = prefs.streamPreference;
         if (['title', 'title-bvid', 'title-bvid-quality', 'detailed'].includes(prefs.filenameStyle)) filenameStyle = prefs.filenameStyle;
         qualityStrategyEls.forEach((el) => { el.value = qualityStrategy; });
+        streamPreferenceEls.forEach((el) => { el.value = streamPreference; });
         if (filenameStyleEl) filenameStyleEl.value = filenameStyle;
         syncQualitySelection();
         refreshFilenamePreview();
@@ -1328,7 +1349,8 @@
           aid: videoInfo.aid,
           cid: videoInfo.cid,
           qn: selectedQn,
-          duration: videoInfo.duration
+          duration: videoInfo.duration,
+          streamPreference
         });
         if (requestId !== estimateRequestId || activeMode === 'list') return;
         currentEstimateBytes = Number(est.sizeBytes) || 0;
@@ -1937,6 +1959,7 @@
         },
         qn: selectedQn,
         format: selectedFormat,
+        streamPreference,
         mode: sel?.mode || 'durl',
         pageIndex,
         label: selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel(),
@@ -1972,6 +1995,7 @@
     async function runSingleDownload(info, opts = {}) {
       const format = opts.format || selectedFormat;
       const qn = opts.qn != null ? opts.qn : selectedQn;
+      const streamSelection = opts.streamPreference || streamPreference;
       const jobId = opts.jobId || null;
       const shouldCancel = () => Boolean(activeJobs.get(jobId)?.cancelRequested || (queueRunning && queueCancelled));
       await waitWhileQueuePaused();
@@ -1995,6 +2019,7 @@
         aid: info.aid,
         cid: info.cid,
         qn,
+        streamPreference: streamSelection,
         title: info.title,
         filenameBase: buildFilenameBase(info, qn, format),
         jobId
@@ -2140,7 +2165,7 @@
       const isRetry = Array.isArray(retryPlan);
       if (!isRetry && (!canStartCurrentDownload() || !isMultiPartVideo(videoInfo.pages))) return;
       const plan = isRetry ? retryPlan.map((item) => ({ ...item })) : videoInfo.pages.map((_part, index) => ({
-        href: location.href, index, qn: selectedQn, format: selectedFormat,
+        href: location.href, index, qn: selectedQn, format: selectedFormat, streamPreference,
         label: selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel(),
         mode: qualities.find((quality) => quality.qn === selectedQn)?.mode || 'durl'
       }));
@@ -2181,7 +2206,7 @@
                 job.info = result.info;
                 const title = job.cardEl?.querySelector('.bili-dl-progress-title');
                 if (title) { title.textContent = job.info.title; title.title = job.info.title; }
-                await runSingleDownload(job.info, { qn: entry.qn, format: entry.format, jobId: job.jobId });
+                await runSingleDownload(job.info, { qn: entry.qn, format: entry.format, streamPreference: entry.streamPreference, jobId: job.jobId });
                 ok++;
                 setTaskState(job, TASK_STATE.completed);
                 await addHistory({ bvid: job.info.bvid, aid: job.info.aid, cid: job.info.cid,
@@ -2252,6 +2277,7 @@
       }
       const queueQn = selectedQn;
       const queueStrategy = qualityStrategy;
+      const queueStreamPreference = streamPreference;
       queueRunning = true;
       operationMode = 'list';
       queueCancelled = false;
@@ -2300,7 +2326,7 @@
             job.label = `列表 · ${actualLabel}${wasDowngraded ? '（降级）' : ''}`;
             const labelEl = job.cardEl?.querySelector('.bili-dl-progress-q');
             if (labelEl) labelEl.textContent = job.label;
-            const result = await runSingleDownload(item, { qn, format: 'mp4', jobId });
+            const result = await runSingleDownload(item, { qn, format: 'mp4', streamPreference: queueStreamPreference, jobId });
             if (result.videoOnly) throw new Error('只下载到无音频视频轨');
             ok++;
             if (wasDowngraded) downgraded++;
@@ -2427,6 +2453,14 @@
         qualityStrategy = el.value === 'highest' ? 'highest' : 'exact';
         qualityStrategyEls.forEach((item) => { item.value = qualityStrategy; });
         renderQualityPills(qualities);
+        saveDownloadPrefs();
+      };
+    });
+    streamPreferenceEls.forEach((el) => {
+      el.onchange = () => {
+        streamPreference = el.value === 'compatible' ? 'compatible' : 'high-bitrate';
+        streamPreferenceEls.forEach((item) => { item.value = streamPreference; });
+        refreshEstimate();
         saveDownloadPrefs();
       };
     });

@@ -471,7 +471,7 @@
     return null;
   }
 
-  async function estimateDownloadSize(aid, cid, qn, durationSec) {
+  async function estimateDownloadSize(aid, cid, qn, durationSec, streamPreference = 'high-bitrate') {
     const dur = Math.max(Number(durationSec) || 0, 1);
 
     if (qn <= 64) {
@@ -495,7 +495,8 @@
         `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=16&fourk=1&platform=pc`
       );
       if (dash.dash?.video?.length) {
-        const video = dash.dash.video.find((v) => v.id === qn) || dash.dash.video[0];
+        const videos = dash.dash.video.filter((v) => Number(v.id) === Number(qn));
+        const video = selectVideoStream(videos, streamPreference) || dash.dash.video[0];
         const audio = collectAudioItems(dash.dash)[0];
         let bytes = 0;
         if (video?.bandwidth) bytes += (video.bandwidth * dur) / 8;
@@ -571,7 +572,29 @@
     };
   }
 
-  async function getStreams(aid, cid, qn) {
+  function isAvcVideoStream(item) {
+    return Number(item?.codecid) === 7 || /^avc/i.test(item?.codecs || '');
+  }
+
+  function streamBandwidth(item) {
+    return Math.max(0, Number(item?.bandwidth) || 0);
+  }
+
+  // B 站可能为同一清晰度返回多种编码或码率。默认以片源声明码率排序，
+  // 不做转码；“兼容优先”才把 AVC 编码放在前面。
+  function selectVideoStream(items, streamPreference = 'high-bitrate') {
+    const candidates = (items || []).filter((item) => pickBestStreamUrl(item));
+    return candidates.sort((a, b) => {
+      const bitrateDelta = streamBandwidth(b) - streamBandwidth(a);
+      const codecDelta = Number(isAvcVideoStream(b)) - Number(isAvcVideoStream(a));
+      if (streamPreference === 'compatible') {
+        return codecDelta || bitrateDelta || urlScore(pickBestStreamUrl(b)) - urlScore(pickBestStreamUrl(a));
+      }
+      return bitrateDelta || codecDelta || urlScore(pickBestStreamUrl(b)) - urlScore(pickBestStreamUrl(a));
+    })[0] || null;
+  }
+
+  async function getStreams(aid, cid, qn, streamPreference = 'high-bitrate') {
     // 720P 及以下优先 durl：单文件含音视频，无需拆轨合并
     if (qn <= 64) {
       try {
@@ -601,14 +624,12 @@
           const maxId = Math.max(...dash.dash.video.map((v) => v.id));
           throw new Error(`该视频无 ${QUALITY_MAP[qn] || qn + 'P'} 片源（源最高 ${QUALITY_MAP[maxId] || maxId + 'P'}）`);
         }
-        // Prefer AVC when the same quality offers several codecs (no transcoding).
-        const avc = (item) => Number(item.codecid) === 7 || /^avc/i.test(item.codecs || '');
-        const video = videos.sort((a, b) => Number(avc(b)) - Number(avc(a)) || urlScore(pickBestStreamUrl(b)) - urlScore(pickBestStreamUrl(a)))[0];
+        const video = selectVideoStream(videos, streamPreference);
         const audioUrls = collectAudioUrls(dash.dash);
         const videoUrl = pickBestStreamUrl(video);
         const audioUrl = audioUrls[0] || null;
         if (!videoUrl) throw new Error('无法解析视频 CDN 地址');
-        log('步骤3', `DASH ${qn}P 视频=${hostFromUrl(videoUrl)} 音频=${audioUrl ? hostFromUrl(audioUrl) : '无'} (${audioUrls.length}路)`);
+        log('步骤3', `DASH ${qn}P ${streamPreference === 'compatible' ? '兼容优先' : '高码率优先'} · 视频=${hostFromUrl(videoUrl)} ${Math.round(streamBandwidth(video) / 1000)}kbps · 音频=${audioUrl ? hostFromUrl(audioUrl) : '无'} (${audioUrls.length}路)`);
         return {
           type: 'dash',
           video: videoUrl,
@@ -1112,12 +1133,12 @@
     });
   }
 
-  async function handleDownload(aid, cid, qn, title, jobId, filenameBase) {
+  async function handleDownload(aid, cid, qn, title, jobId, filenameBase, streamPreference = 'high-bitrate') {
     const session = createSession(jobId);
     try {
       if (session.cancelled) throw new Error('下载已取消');
       const base = safeFilename(filenameBase || title, 'video');
-      let streams = await getStreams(aid, cid, qn);
+      let streams = await getStreams(aid, cid, qn, streamPreference);
 
       if (streams.type === 'durl') {
         const urls = streams.urls || [];
@@ -1268,7 +1289,8 @@
                   e.data.aid,
                   e.data.cid,
                   e.data.qn,
-                  e.data.duration
+                  e.data.duration,
+                  e.data.streamPreference
                 )
           });
           break;
@@ -1276,7 +1298,7 @@
           const jobId = e.data.jobId || null;
           const result = e.data.audioOnly
             ? await handleAudioOnly(e.data.aid, e.data.cid, e.data.title, jobId, e.data.filenameBase)
-            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase);
+            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase, e.data.streamPreference);
           reply(id, { type: 'OK', data: result });
           break;
         }

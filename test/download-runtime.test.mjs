@@ -5,6 +5,18 @@ import { readFile } from 'node:fs/promises';
 
 const agent = await readFile(new URL('../content/page-agent.js', import.meta.url), 'utf8');
 const content = await readFile(new URL('../content/content.js', import.meta.url), 'utf8');
+
+function streamSelectorHarness() {
+  const start = agent.indexOf('  function isAvcVideoStream(');
+  const end = agent.indexOf('  async function getStreams(', start);
+  assert.ok(start >= 0 && end > start, '应保留视频流选择器');
+  const context = vm.createContext({
+    pickBestStreamUrl: (item) => item.baseUrl || null,
+    urlScore: () => 0
+  });
+  vm.runInContext(agent.slice(start, end), context);
+  return context;
+}
 function harness(fetch) {
   const messages = [];
   const context = vm.createContext({ Blob, AbortController, performance, fetch, setTimeout, clearTimeout,
@@ -67,6 +79,14 @@ test('stalled network rejects and aborts its own track', async () => {
   const controller = new AbortController();
   await assert.rejects(c.withStallTimeout(new Promise(() => {}), controller, 5), /无响应/);
   assert.equal(controller.signal.aborted, true);
+});
+
+test('same-quality streams default to the highest source bitrate, with a compatibility override', () => {
+  const c = streamSelectorHarness();
+  const avc = { baseUrl: 'https://cdn.example/avc', codecid: 7, codecs: 'avc1.640028', bandwidth: 1_500_000 };
+  const hevc = { baseUrl: 'https://cdn.example/hevc', codecid: 12, codecs: 'hev1.1.6.L150.90', bandwidth: 3_200_000 };
+  assert.equal(c.selectVideoStream([avc, hevc], 'high-bitrate'), hevc);
+  assert.equal(c.selectVideoStream([avc, hevc], 'compatible'), avc);
 });
 test('ignored resume Range restarts without duplicating bytes', async () => {
   let c, s, calls = 0;
