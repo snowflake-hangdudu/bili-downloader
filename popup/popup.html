@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="../shared/design-system.css">
 </head>
-<body>
+<body data-theme="bilibili">
   <div class="popup">
     <header class="popup-header">
-      <img src="../icons/icon48.png?v=3" width="28" height="28" alt="" class="popup-icon">
+      <img src="../icons/icon48.png?v=5" width="30" height="30" alt="" class="popup-icon">
       <div class="popup-header-text">
-        <h1>下载助手 B站</h1>
+        <h1>B站视频下载助手</h1>
         <span id="app-version" class="popup-version"></span>
       </div>
     </header>
@@ -59,20 +60,10 @@
           </div>
         </div>
 
-        <div id="video-pages" class="popup-pages hidden"></div>
-
         <div class="popup-section">
           <div class="popup-section-head">可用清晰度</div>
           <div id="quality-tags" class="popup-quality-tags"></div>
         </div>
-
-        <ul class="popup-tips compact">
-          <li>实际下载在页面右下角悬浮面板操作</li>
-          <li>支持 MP4 视频与 M4A 音频；最多同时 3 路并行</li>
-          <li>多 P 可「队列下载」；并行进行中请先完成再开队列</li>
-          <li>列表页可进入「列表下载」，每次最多勾选 10 个视频</li>
-          <li>下载失败？<a id="popup-faq-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">查看常见问题</a></li>
-        </ul>
 
         <button id="btn-open-panel" type="button" class="popup-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>

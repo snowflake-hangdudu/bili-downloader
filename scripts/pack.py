@@ -9,6 +9,7 @@ INCLUDE = {
     'manifest.json', 'background.js',
     '_locales/zh_CN/messages.json', '_locales/en/messages.json',
     'content/page-agent.js', 'content/content.js', 'content/content.css',
+    'shared/design-system.css',
     'popup/popup.html', 'popup/popup.js', 'popup/popup.css',
     'lib/mp4-remux.iife.js', 'lib/m4s-mux.js', 'lib/m4s-mux-worker.js',
     'icons/icon128.png', 'icons/icon48.png', 'icons/icon32.png', 'icons/icon16.png',

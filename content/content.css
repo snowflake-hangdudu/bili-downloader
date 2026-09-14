@@ -1,48 +1,35 @@
 #bili-dl-panel {
-  /* 扁平极简主题：浅色/深色跟随系统，单一蓝色强调 */
-  --bdl-accent: #000000;
+  /* Download Assistant UI System V1 · Bilibili
+     Brand tokens come from shared/design-system.css via data-theme.
+     Local --bdl-* below are fallbacks only. */
+  --bdl-accent: #00aeec;
+  --bdl-accent-strong: #007fba;
+  --bdl-accent-hover: #009fd8;
   --bdl-accent-contrast: #ffffff;
-  --bdl-accent-soft: rgba(0, 0, 0, 0.06);
-  --bdl-surface: #f5f5f5;
+  --bdl-accent-soft: #eaf9ff;
+  --bdl-accent-border: #a9e8fa;
+  --bdl-surface: #f7f8fa;
   --bdl-bg: #ffffff;
-  --bdl-text: #111111;
-  --bdl-text-muted: #666666;
-  --bdl-border: #e3e3e3;
-  --bdl-header-text: #111111;
-  --bdl-success-bg: #f5f5f5;
-  --bdl-success-text: #111111;
+  --bdl-text: #18181b;
+  --bdl-text-muted: #71717a;
+  --bdl-border: #e5e7eb;
+  --bdl-header-text: #18181b;
+  --bdl-success-bg: #f7f8fa;
+  --bdl-success-text: #18181b;
   --bdl-error-bg: #fff4f2;
   --bdl-error-text: #a72c22;
   --bdl-radius: 6px;
-  --bdl-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+  --bdl-shadow: 0 8px 24px rgba(24, 24, 27, 0.12);
+  --brand-cta: linear-gradient(135deg, #009ddb, #0074da);
 
   position: fixed;
   right: 24px;
   bottom: 120px;
   z-index: 999999;
-  font-family: 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--bdl-text);
-}
-
-@media (prefers-color-scheme: dark) {
-  #bili-dl-panel {
-    --bdl-accent: #ffffff;
-    --bdl-accent-contrast: #000000;
-    --bdl-accent-soft: rgba(255, 255, 255, 0.10);
-    --bdl-surface: #1b1b1b;
-    --bdl-bg: #101010;
-    --bdl-text: #e6e6e6;
-    --bdl-text-muted: #9a9a9a;
-    --bdl-border: #2b2b2b;
-    --bdl-header-text: #e6e6e6;
-    --bdl-success-bg: #1b1b1b;
-    --bdl-success-text: #e6e6e6;
-    --bdl-error-bg: #331f20;
-    --bdl-error-text: #ffb4ab;
-    --bdl-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
-  }
 }
 
 /* 面板内通用 hidden（队列按钮等依赖此类） */
@@ -73,16 +60,18 @@
   border: 1px solid var(--bdl-border);
   border-radius: 7px;
   background: var(--bdl-surface);
-  color: var(--bdl-text-muted);
+  color: var(--text-secondary, #52525b);
   padding: 7px 10px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .bili-dl-mode-tabs button.active {
-  color: var(--bdl-accent-contrast);
-  background: var(--bdl-accent);
-  border-color: var(--bdl-accent);
+  color: var(--brand-strong, var(--bdl-accent-strong));
+  background: var(--brand-soft, var(--bdl-accent-soft));
+  border-color: var(--brand, var(--bdl-accent));
+  font-weight: 600;
 }
 
 .bili-dl-list-body { width: 100%; box-sizing: border-box; padding: 14px 16px 16px; background: var(--bdl-bg); }
@@ -163,7 +152,7 @@
   position: absolute;
   bottom: 76px;
   right: 0;
-  width: 400px;
+  width: 408px;
   max-width: calc(100vw - 32px);
   max-height: min(calc(100vh - 200px), 640px);
   box-sizing: border-box;
@@ -288,14 +277,29 @@
 }
 
 .bili-dl-header {
+  position: relative;
+  box-sizing: border-box;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  height: 52px;
+  min-height: 52px;
+  padding: 8px 16px;
   background: var(--bdl-bg);
   color: var(--bdl-header-text);
   border-bottom: 1px solid var(--bdl-border);
+}
+
+.bili-dl-header::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--bdl-accent), transparent 65%);
+  opacity: .28;
 }
 
 .bili-dl-header-left {
@@ -306,6 +310,9 @@
 }
 
 .bili-dl-header-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   flex-shrink: 0;
 }
 
@@ -338,8 +345,9 @@
 }
 
 #bili-dl-close:hover {
-  color: var(--bdl-text);
-  border-color: var(--bdl-text-muted);
+  color: var(--bdl-accent-strong);
+  border-color: var(--bdl-accent-border);
+  background: var(--bdl-accent-soft);
 }
 
 .bili-dl-body {
@@ -537,10 +545,10 @@
 }
 
 .bili-dl-video-author {
-  margin-top: 5px;
+  margin-top: 4px;
   font-size: 12px;
-  color: var(--bdl-accent);
-  font-weight: 500;
+  color: var(--text-secondary, #52525b);
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -552,14 +560,14 @@
 
 .bili-dl-video-author::before {
   content: 'UP · ';
-  color: var(--bdl-text-muted);
+  color: var(--text-secondary, #52525b);
   font-weight: 400;
 }
 
 .bili-dl-video-sub {
-  margin-top: 5px;
+  margin-top: 4px;
   font-size: 11px;
-  color: var(--bdl-text-muted);
+  color: var(--text-muted, #71717a);
 }
 
 .bili-dl-pages {
@@ -618,28 +626,33 @@
 }
 
 .bili-dl-pill {
-  padding: 7px 14px;
+  padding: 0 12px;
+  min-height: 30px;
   border: 1px solid var(--bdl-border);
-  border-radius: var(--bdl-radius);
+  border-radius: 6px;
   background: var(--bdl-surface);
-  color: var(--bdl-text-muted);
+  color: var(--text-secondary, #52525b);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 
 .bili-dl-pill.active {
-  border-color: var(--bdl-accent);
-  background: var(--bdl-accent);
-  color: var(--bdl-accent-contrast);
+  border-color: var(--brand, var(--bdl-accent));
+  background: var(--brand-soft, var(--bdl-accent-soft));
+  color: var(--brand-strong, var(--bdl-accent-strong));
+  font-weight: 600;
 }
 
 .bili-dl-pill.loading,
 .bili-dl-pill.disabled {
   cursor: default;
-  opacity: 0.6;
+  color: var(--text-muted, #71717a);
+  opacity: 1;
 }
 
 .bili-dl-info-row {
@@ -677,7 +690,8 @@
   padding: 12px 16px;
   border: none;
   border-radius: var(--bdl-radius);
-  background: var(--bdl-accent);
+  min-height: 44px;
+  background: var(--brand-cta, linear-gradient(135deg, #009ddb, #0074da));
   color: var(--bdl-accent-contrast);
   font-size: 14px;
   font-weight: 600;
@@ -700,13 +714,16 @@
 
 .bili-dl-btn-secondary {
   margin-top: 8px;
-  background: transparent;
-  color: var(--bdl-accent);
-  border: 1px solid var(--bdl-accent);
+  background: #ffffff;
+  color: var(--text-secondary, #52525b);
+  border: 1px solid var(--bdl-border);
+  font-weight: 500;
 }
 
 .bili-dl-btn-secondary:hover:not(:disabled) {
-  background: var(--bdl-accent-soft);
+  background: var(--brand-soft, var(--bdl-accent-soft));
+  border-color: var(--brand-border, var(--bdl-accent-border));
+  color: var(--brand-strong, var(--bdl-accent-strong));
 }
 
 .bili-dl-estimate {
@@ -714,12 +731,13 @@
   align-items: flex-start;
   gap: 6px;
   margin-bottom: 10px;
+  min-height: 34px;
   padding: 8px 10px;
-  border-radius: var(--bdl-radius);
+  border-radius: 7px;
   background: var(--bdl-surface);
   border: 1px solid var(--bdl-border);
   font-size: 11px;
-  color: var(--bdl-text-muted);
+  color: var(--text-muted, #71717a);
   line-height: 1.45;
 }
 
@@ -1095,22 +1113,24 @@
 .bili-dl-feedback {
   appearance: none;
   -webkit-appearance: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   box-sizing: border-box;
   margin: 0;
   padding: 4px 10px;
-  border-radius: var(--bdl-radius);
-  background: var(--bdl-accent-soft);
-  border: 1px solid var(--bdl-border);
-  color: var(--bdl-accent);
-  font-size: 10px;
-  font-weight: 600;
+  min-height: 26px;
+  border-radius: 6px;
+  background: var(--footer-bg, #f3f4f6);
+  border: 1px solid transparent;
+  color: var(--footer-text, #52525b);
+  font-size: 11px;
+  font-weight: 500;
   font-family: inherit;
   line-height: 1.35;
   text-decoration: none;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1119,7 +1139,8 @@
 .bili-dl-faq-link:hover,
 .bili-dl-privacy-link:hover,
 .bili-dl-feedback:hover {
-  background: var(--bdl-bg);
+  background: var(--brand-soft, var(--bdl-accent-soft));
+  color: var(--brand-strong, var(--bdl-accent-strong));
 }
 
 .bili-dl-faq-link,
@@ -1157,7 +1178,7 @@
   resize: vertical;
   padding: 10px;
   border: 1px solid var(--bdl-border);
-  border-radius: var(--bdl-radius);
+  border-radius: 10px;
   background: var(--bdl-surface);
   color: var(--bdl-text);
   font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -1268,23 +1289,19 @@
 
 /* ===== 格式切换 ===== */
 .bili-dl-format-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 11px;
-  color: var(--bdl-text-muted);
+  display: block;
+  margin-bottom: 12px;
 }
 
 .bili-dl-format-pills {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .bili-dl-format-pills .bili-dl-pill {
-  padding: 6px 12px;
-  font-size: 11px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 /* ===== 下载历史 ===== */

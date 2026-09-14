@@ -1,0 +1,29 @@
+B站视频下载助手 · 测试链接
+================================
+
+说明：
+- 仅用于本机 / 审核测试
+- 请在 Edge / Chrome / Firefox 加载扩展后打开下列页面
+- 需中国可访问 bilibili.com 的网络
+
+--------------------------------
+1. 正常视频页（单集）
+--------------------------------
+https://www.bilibili.com/video/BV1iV4k6mEbA
+
+--------------------------------
+2. 视频合集
+--------------------------------
+https://www.bilibili.com/video/BV1794y127up
+
+--------------------------------
+3. 视频选集（多分 P）
+--------------------------------
+https://www.bilibili.com/video/BV17G4y1P7Y4
+
+--------------------------------
+备用公开样例（历史常用）
+--------------------------------
+https://www.bilibili.com/video/BV1GJ411x7h7
+https://www.bilibili.com/video/BV1244y137qJ
+https://www.bilibili.com/video/BV1HfW2epEPi

@@ -232,7 +232,9 @@ async function fallbackFromPage(tabId) {
 
 function renderVideo(data) {
   const info = data.info;
-  const qualities = data.qualities || [];
+  const rawQualities = data.qualities || [];
+  const preferred = rawQualities.filter((q) => Number(q.qn) > 16);
+  const qualities = preferred.length ? preferred : rawQualities;
 
   $('video-title').textContent = info.title || '当前 B 站视频';
 
@@ -264,23 +266,6 @@ function renderVideo(data) {
   } else {
     cover.classList.add('hidden');
     coverPh.classList.remove('hidden');
-  }
-
-  const pagesEl = $('video-pages');
-  if (info.pages?.length > 1 && info.pages.every((p) => p && p.cid)) {
-    pagesEl.classList.remove('hidden');
-    clearNode(pagesEl);
-    const frag = document.createDocumentFragment();
-    info.pages.forEach((p) => {
-      const el = document.createElement('span');
-      el.className = 'popup-page-tag';
-      el.textContent = `P${p.page}${p.part ? ' ' + p.part : ''}`;
-      frag.appendChild(el);
-    });
-    pagesEl.appendChild(frag);
-  } else {
-    pagesEl.classList.add('hidden');
-    clearNode(pagesEl);
   }
 
   const tagsEl = $('quality-tags');

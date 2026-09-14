@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.1.12",
+  "version": "1.1.7",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
@@ -37,7 +37,7 @@
         "https://bilibili.com/list/*"
       ],
       "js": ["content/content.js"],
-      "css": ["content/content.css"],
+      "css": ["content/content.css", "shared/design-system.css"],
       "run_at": "document_end"
     }
   ],

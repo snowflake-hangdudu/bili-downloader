@@ -17,12 +17,12 @@ function streamSelectorHarness() {
   vm.runInContext(agent.slice(start, end), context);
   return context;
 }
-function harness(fetch) {
+function harness(fetch, pickWorkingUrl = async (url) => url) {
   const messages = [];
   const context = vm.createContext({ Blob, AbortController, performance, fetch, setTimeout, clearTimeout,
     window: { postMessage: (m) => messages.push(m) }, AGENT: 'agent', PROGRESS_REPORT_INTERVAL_MS: 150,
     location: { href: 'https://www.bilibili.com/video/BVtest' },
-    pickWorkingUrl: async (url) => url, isDownloadableCdnUrl: () => true,
+    pickWorkingUrl, isDownloadableCdnUrl: () => true,
     rememberMirrorHost() {}, hostFromUrl: () => 'cdn', log() {}, sendProgress() {} });
   vm.runInContext(agent.slice(agent.indexOf('  const sessions ='), agent.indexOf('  function mergeM4sInWorker')), context);
   return { context, messages, session: context.createSession('test') };
@@ -109,14 +109,48 @@ test('ignored resume Range restarts without duplicating bytes', async () => {
   assert.equal(calls, 2);
 });
 
+test('transport reset switches CDN and resumes the received byte range', async () => {
+  let calls = 0;
+  const first = 'https://cdn-a.example/file';
+  const second = 'https://cdn-b.example/file';
+  const { context: c, session: s } = harness(async (url, options) => {
+    calls++;
+    if (url === first) {
+      let reads = 0;
+      return { ok: true, status: 200, headers: new Headers({ 'content-length': '2048' }), body: {
+        getReader: () => ({ async read() {
+          if (++reads === 1) return { done: false, value: new Uint8Array(1024) };
+          throw new Error('network reset');
+        }, releaseLock() {} }) } };
+    }
+    assert.equal(url, second);
+    assert.equal(options.headers.Range, 'bytes=1024-');
+    return response(1024, { 'content-range': 'bytes 1024-2047/2048' }, 206);
+  }, async (_url, _preferHost, excluded) => excluded.has(first) ? second : first);
+  assert.equal((await c.pageDownload(s, ['source'])).size, 2048);
+  assert.equal(calls, 2);
+});
+
 function saveHarness(results) {
-  const calls = [], revoked = [];
-  const c = vm.createContext({ URL: { createObjectURL: () => 'blob:test', revokeObjectURL: (u) => revoked.push(u) },
+  const calls = [], revoked = [], blobs = [];
+  const c = vm.createContext({ URL: { createObjectURL: (blob) => { blobs.push(blob); return 'blob:test'; }, revokeObjectURL: (u) => revoked.push(u) },
     setTimeout: (fn) => setTimeout(fn, 0),
     EXT: { runtime: { sendMessage: async (msg) => { calls.push(msg); return results.shift(); } } } });
   vm.runInContext(content.slice(content.indexOf('  async function downloadBlob'), content.indexOf('  function formatView')), c);
-  return { save: c.downloadBlob, calls, revoked };
+  return { save: c.downloadBlob, calls, revoked, blobs };
 }
+test('MP4 and M4A saves override empty/text MIME without changing media bytes', async () => {
+  for (const [extension, mime] of [['mp4', 'video/mp4'], ['m4a', 'audio/mp4']]) {
+    for (const sourceType of ['', 'text/plain']) {
+      const h = saveHarness([{ ok: true, downloadId: 1 }, { ok: true, state: 'complete' }]);
+      const bytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 255]);
+      await h.save(new Blob([bytes], { type: sourceType }), `媒体.${extension}`);
+      assert.equal(h.blobs[0].type, mime);
+      assert.deepEqual(new Uint8Array(await h.blobs[0].arrayBuffer()), bytes);
+      assert.equal(h.calls[0].filename, `媒体.${extension}`);
+    }
+  }
+});
 test('native save waits for complete, then releases Blob URL', async () => {
   const h = saveHarness([{ ok: true, downloadId: 1 }, { ok: true, state: 'in_progress' }, { ok: true, state: 'complete' }]);
   assert.equal(await h.save(new Blob(['a']), 'a.mp4'), 1);

@@ -245,8 +245,7 @@
     });
   }
 
-  async function probeCdn(url) {
-    const controller = new AbortController();
+  async function probeCdn(url, controller = new AbortController()) {
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
@@ -267,39 +266,35 @@
     }
   }
 
-  async function pickWorkingUrl(url, preferHost) {
-    const candidates = prioritizeCandidates(buildCdnCandidates(url, preferHost));
-    const tried = new Set();
-
-    async function tryOne(u, tag) {
-      if (!u || tried.has(u)) return null;
-      tried.add(u);
-      const host = hostFromUrl(u);
-      log('探测', tag ? `${host} (${tag})` : host);
-      if (await probeCdn(u)) {
-        rememberMirrorHost(u);
-        log('探测', '可用 ' + host);
-        return u;
+  async function pickWorkingUrl(url, preferHost, excluded = new Set()) {
+    const candidates = [...new Set(prioritizeCandidates(buildCdnCandidates(url, preferHost)))]
+      .filter((candidate) => !excluded.has(candidate));
+    // Race a bounded batch: a healthy node must not wait for another node's
+    // timeout. Cancel losing probes immediately to release their connections.
+    for (let i = 0; i < candidates.length; i += PROBE_PARALLEL) {
+      const batch = candidates.slice(i, i + PROBE_PARALLEL);
+      const controllers = batch.map(() => new AbortController());
+      const hit = await new Promise((resolve) => {
+        let pending = batch.length;
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          controllers.forEach((controller) => controller.abort());
+          resolve(value);
+        };
+        batch.forEach((candidate, index) => {
+          probeCdn(candidate, controllers[index]).then((ok) => {
+            if (ok) finish(candidate);
+          }).catch(() => {}).finally(() => {
+            if (--pending === 0) finish(null);
+          });
+        });
+      });
+      if (hit) {
+        rememberMirrorHost(hit);
+        log('探测', '可用 ' + hostFromUrl(hit));
       }
-      log('探测', '不可用 ' + host);
-      return null;
-    }
-
-    if (preferHost) {
-      const hit = await tryOne(rewriteCdnUrl(url, preferHost), '嗅探');
-      if (hit) return hit;
-    }
-
-    for (const host of sessionMirrorCache) {
-      const hit = await tryOne(rewriteCdnUrl(url, host), '缓存');
-      if (hit) return hit;
-    }
-
-    const rest = candidates.filter((u) => !tried.has(u));
-    for (let i = 0; i < rest.length; i += PROBE_PARALLEL) {
-      const batch = rest.slice(i, i + PROBE_PARALLEL);
-      const results = await Promise.all(batch.map((u) => tryOne(u, null)));
-      const hit = results.find(Boolean);
       if (hit) return hit;
     }
     return null;
@@ -596,8 +591,12 @@
       }
     }
 
+    // 隐藏 360P 及更低；若过滤后为空则保留原列表，避免无法下载
+    const preferred = qualities.filter((q) => Number(q.qn) > 16);
+    const visible = preferred.length ? preferred : qualities;
+
     return {
-      qualities: qualities.sort((a, b) => b.qn - a.qn),
+      qualities: visible.sort((a, b) => b.qn - a.qn),
       maxQn: maxDashQn,
       maxLabel: QUALITY_MAP[maxDashQn] || (maxDashQn ? maxDashQn + 'P' : ''),
       loginHint: buildLoginHint(maxDashQn)
@@ -945,129 +944,141 @@
 
     let lastErr;
     for (const src of list) {
-      let working = null;
       let chunks = [];
       let received = 0;
       let total = 0;
+      const attemptedWorking = new Set();
 
-      try {
-        await waitWhilePaused(session);
-        throwIfCancelled(session);
-        working = await pickWorkingUrl(src, preferHost);
-        if (!working) {
-          lastErr = new Error('CDN 探测失败: ' + hostFromUrl(src));
-          continue;
-        }
-
-        rememberMirrorHost(working);
-        log('下载', '使用 ' + hostFromUrl(working));
-
-        while (true) {
+      // Do not discard a partial file merely because a just-probed mirror is
+      // reset during the full request. Try each remaining candidate once and
+      // use Range to continue from the received byte count.
+      while (true) {
+        let working = null;
+        try {
           await waitWhilePaused(session);
           throwIfCancelled(session);
-          const pauseEpoch = session.pauseEpoch;
-          session.abortController = new AbortController();
-          session.controllers[trackId] = session.abortController;
-          const headers = {};
-          if (received > 0) headers.Range = `bytes=${received}-`;
+          working = await pickWorkingUrl(src, preferHost, attemptedWorking);
+          if (!working || attemptedWorking.has(working)) {
+            // Keep the transfer error (for example, an integrity/range error)
+            // instead of masking it as a generic probe failure.
+            lastErr ||= new Error('CDN 探测失败: ' + hostFromUrl(src));
+            break;
+          }
+          attemptedWorking.add(working);
 
-          let res;
-          try {
-            res = await withStallTimeout(fetch(working, {
-              credentials: 'omit',
-              referrer: location.href,
-              referrerPolicy: 'strict-origin-when-cross-origin',
-              headers,
-              signal: session.abortController.signal
-            }), session.controllers[trackId], 30000);
-          } catch (e) {
-            if (session.cancelled) throw new Error('下载已取消');
-            if (session.paused || session.pauseEpoch !== pauseEpoch) {
+          rememberMirrorHost(working);
+          log('下载', '使用 ' + hostFromUrl(working));
+
+          while (true) {
+            await waitWhilePaused(session);
+            throwIfCancelled(session);
+            const pauseEpoch = session.pauseEpoch;
+            session.abortController = new AbortController();
+            session.controllers[trackId] = session.abortController;
+            const headers = {};
+            if (received > 0) headers.Range = `bytes=${received}-`;
+
+            let res;
+            try {
+              res = await withStallTimeout(fetch(working, {
+                credentials: 'omit',
+                referrer: location.href,
+                referrerPolicy: 'strict-origin-when-cross-origin',
+                headers,
+                signal: session.abortController.signal
+              }), session.controllers[trackId], 30000);
+            } catch (e) {
+              if (session.cancelled) throw new Error('下载已取消');
+              if (session.paused || session.pauseEpoch !== pauseEpoch) {
+                await waitWhilePaused(session);
+                throwIfCancelled(session);
+                continue;
+              }
+              throw e;
+            }
+
+            if (!res.ok && !(received > 0 && res.status === 206)) {
+              throw new Error('HTTP ' + res.status + ' (' + hostFromUrl(working) + ')');
+            }
+
+            if (received > 0 && res.status === 200) {
+              // Range ignored: restart, never append a full response to the partial file.
+              chunks = [];
+              received = 0;
+              total = 0;
+            }
+            if (res.status === 206) {
+              const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('content-range') || '');
+              if (!range || Number(range[1]) !== received || Number(range[2]) < received ||
+                  Number(range[2]) >= Number(range[3]) || (total && total !== Number(range[3]))) {
+                await res.body?.cancel();
+                throw new Error('下载范围不一致，请重试');
+              }
+              total = Number(range[3]);
+            } else if (received === 0) {
+              total = Number(res.headers.get('content-length')) || 0;
+            }
+
+            const reader = res.body.getReader();
+            let needResume = false;
+
+            try {
+              while (true) {
+                throwIfCancelled(session);
+                let readResult;
+                try {
+                  readResult = await withStallTimeout(reader.read(), session.controllers[trackId], 60000);
+                } catch (e) {
+                  if (session.cancelled) throw new Error('下载已取消');
+                  if (session.paused || session.pauseEpoch !== pauseEpoch) {
+                    needResume = true;
+                    break;
+                  }
+                  throw e;
+                }
+
+                const { done, value } = readResult;
+                if (done) {
+                  if (session.paused || session.pauseEpoch !== pauseEpoch) needResume = true;
+                  break;
+                }
+
+                chunks.push(value);
+                received += value.length;
+                const progress = { received, total, percent: total ? Math.round((received / total) * 100) : 0 };
+                reportDownloadProgress(session, trackId, progress, onProgress);
+              }
+            } finally {
+              try { reader.releaseLock(); } catch { /* ignore */ }
+            }
+
+            if (needResume) {
               await waitWhilePaused(session);
               throwIfCancelled(session);
               continue;
             }
-            throw e;
+
+            if (total && received !== total) throw new Error('下载文件不完整，请重试');
+
+            reportDownloadProgress(session, trackId, { received, total, percent: total ? Math.round((received / total) * 100) : 0 }, onProgress, true);
+            log('下载', '成功 ' + (received / 1024 / 1024).toFixed(1) + 'MB');
+            if (received < 1024) throw new Error('下载内容为空');
+            return new Blob(chunks);
           }
-
-          if (!res.ok && !(received > 0 && res.status === 206)) {
-            lastErr = new Error('HTTP ' + res.status + ' (' + hostFromUrl(working) + ')');
-            break;
-          }
-
-          if (received > 0 && res.status === 200) {
-            // Range ignored: restart, never append a full response to the partial file.
-            chunks = [];
-            received = 0;
-            total = 0;
-          }
-          if (res.status === 206) {
-            const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('content-range') || '');
-            if (!range || Number(range[1]) !== received || Number(range[2]) < received ||
-                Number(range[2]) >= Number(range[3]) || (total && total !== Number(range[3]))) {
-              await res.body?.cancel();
-              throw new Error('下载范围不一致，请重试');
-            }
-            total = Number(range[3]);
-          } else if (received === 0) {
-            total = Number(res.headers.get('content-length')) || 0;
-          }
-
-          const reader = res.body.getReader();
-          let needResume = false;
-
-          try {
-            while (true) {
-              throwIfCancelled(session);
-              let readResult;
-              try {
-                readResult = await withStallTimeout(reader.read(), session.controllers[trackId], 60000);
-              } catch (e) {
-                if (session.cancelled) throw new Error('下载已取消');
-                if (session.paused || session.pauseEpoch !== pauseEpoch) {
-                  needResume = true;
-                  break;
-                }
-                throw e;
-              }
-
-              const { done, value } = readResult;
-              if (done) {
-                if (session.paused || session.pauseEpoch !== pauseEpoch) needResume = true;
-                break;
-              }
-
-              chunks.push(value);
-              received += value.length;
-              const progress = { received, total, percent: total ? Math.round((received / total) * 100) : 0 };
-              reportDownloadProgress(session, trackId, progress, onProgress);
-            }
-          } finally {
-            try { reader.releaseLock(); } catch { /* ignore */ }
-          }
-
-          if (needResume) {
-            await waitWhilePaused(session);
-            throwIfCancelled(session);
+        } catch (e) {
+          if (e.message === '下载已取消') throw e;
+          lastErr = e;
+          log('下载', '失败 ' + (e.message || e));
+          // All candidates are finite. On a transport failure, keep the partial
+          // bytes and let the next candidate resume it with Range.
+          if (attemptedWorking.size && !session.paused) {
+            log('下载', '切换 CDN 后继续');
             continue;
           }
-
-          if (total && received !== total) throw new Error('下载文件不完整，请重试');
-
-          reportDownloadProgress(session, trackId, { received, total, percent: total ? Math.round((received / total) * 100) : 0 }, onProgress, true);
-          log('下载', '成功 ' + (received / 1024 / 1024).toFixed(1) + 'MB');
-          if (received < 1024) {
-            lastErr = new Error('下载内容为空');
-            break;
-          }
-          return new Blob(chunks);
+          break;
+        } finally {
+          session.controllers[trackId]?.abort();
         }
-      } catch (e) {
-        if (e.message === '下载已取消') throw e;
-        lastErr = e;
-        log('下载', '失败 ' + (e.message || e));
-      } finally {
-        session.controllers[trackId]?.abort();
       }
     }
     throw new Error(formatDownloadError(lastErr || { message: '所有 CDN 镜像均不可用' }));

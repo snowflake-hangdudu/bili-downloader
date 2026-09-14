@@ -9,7 +9,7 @@
   const AGENT = 'bili-dl-agent';
   const VERSION = EXT.runtime.getManifest().version;
   // 图标资源缓存破坏：换图标后递增 ICON_REV，避免只 F5 仍显示旧图
-  const ICON_REV = '26';
+  const ICON_REV = '27';
   const ICON_URL = EXT.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
   const FAQ_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/faq.html';
   const PRIVACY_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/';
@@ -28,6 +28,22 @@
 
   let muxReadyPromise = null;
   const MERGE_WORKER_URL = EXT.runtime.getURL('lib/m4s-mux-worker.js');
+  let mergeWorkerSourcePromise = null;
+  function loadMergeWorkerSource() {
+    if (!mergeWorkerSourcePromise) {
+      mergeWorkerSourcePromise = Promise.all([
+        'lib/mp4-remux.iife.js', 'lib/m4s-mux.js', 'lib/m4s-mux-worker.js'
+      ].map(async (path) => {
+        const response = await fetch(EXT.runtime.getURL(path));
+        if (!response.ok) throw new Error('合成组件读取失败: ' + path);
+        return response.text();
+      })).then((sources) => sources.join('\n;\n')).catch((error) => {
+        mergeWorkerSourcePromise = null;
+        throw error;
+      });
+    }
+    return mergeWorkerSourcePromise;
+  }
   const LARGE_MERGE_BYTES = 512 * 1024 * 1024;
   const MAX_SMALL_MERGE_WORKERS = 2;
   const mergeWorkerQueue = [];
@@ -49,6 +65,9 @@
     clearTimeout(job.startTimer);
     clearTimeout(job.stallTimer);
     try { job.worker?.terminate(); } catch { /* ignore */ }
+    if (job.workerUrl) URL.revokeObjectURL(job.workerUrl);
+    job.videoBlob = null;
+    job.audioBlob = null;
     activeMergeWorkers.delete(job.jobId);
     const queuedIndex = mergeWorkerQueue.indexOf(job);
     if (queuedIndex >= 0) mergeWorkerQueue.splice(queuedIndex, 1);
@@ -64,10 +83,18 @@
     return active.length < MAX_SMALL_MERGE_WORKERS;
   }
 
-  function runMergeWorker(job) {
+  async function runMergeWorker(job) {
+    // Reserve the slot before loading scripts so pending starts obey the limit.
+    activeMergeWorkers.set(job.jobId, job);
     let worker;
     try {
-      worker = new Worker(MERGE_WORKER_URL);
+      // A content script still creates workers with the document's origin.
+      // Bundle only packaged scripts into a same-origin Blob instead of trying
+      // to construct a cross-origin chrome-extension:// worker.
+      const source = await loadMergeWorkerSource();
+      if (job.finished) return;
+      job.workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+      worker = new Worker(job.workerUrl);
     } catch (error) {
       finishMergeWorkerJob(job, { error: `WORKER_UNAVAILABLE: ${error?.message || error}` });
       return;
@@ -197,7 +224,13 @@
   async function downloadBlob(blob, filename, shouldCancel = () => false) {
     if (shouldCancel()) throw new Error('下载已取消');
     if (!blob?.size || !filename) throw new Error('保存数据不可用，请刷新页面后重试');
-    const url = URL.createObjectURL(blob);
+    const extension = /\.(mp4|m4a)$/i.exec(filename)?.[1]?.toLowerCase();
+    if (!extension) throw new Error('保存文件格式无效，请重新选择 MP4 或 M4A');
+    // Direct CDN downloads may have an empty or text MIME type. Give the
+    // browser an explicit media type without decoding or copying all bytes.
+    const mediaType = extension === 'm4a' ? 'audio/mp4' : 'video/mp4';
+    const mediaBlob = blob.type === mediaType ? blob : blob.slice(0, blob.size, mediaType);
+    const url = URL.createObjectURL(mediaBlob);
     let downloadId;
     try {
       const started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
@@ -402,7 +435,7 @@
     const panel = document.createElement('div');
     panel.id = 'bili-dl-panel-root';
     panel.appendChild(createFragment(`
-      <div id="bili-dl-panel">
+      <div id="bili-dl-panel" data-theme="bilibili">
         <button id="bili-dl-toggle" title="打开下载助手" aria-label="打开下载助手" aria-expanded="false">
           <img src="${ICON_URL}" alt="">
         </button>
@@ -410,7 +443,7 @@
           <div class="bili-dl-header">
             <div class="bili-dl-header-left">
               <img class="bili-dl-header-icon" src="${ICON_URL}" alt="" width="22" height="22">
-              <span class="bili-dl-title">下载助手 B站</span>
+              <span class="bili-dl-title">B站视频下载助手</span>
               <span class="bili-dl-version">v${VERSION}</span>
             </div>
             <button id="bili-dl-close" aria-label="关闭">&times;</button>
@@ -464,8 +497,8 @@
               </label>
             </div>
 
-            <div id="bili-dl-format-row" class="bili-dl-format-row">
-              <span class="bili-dl-info-item">格式</span>
+            <div id="bili-dl-format-row" class="bili-dl-format-row bili-dl-section">
+              <div class="bili-dl-section-head bili-dl-format-label">格式</div>
               <div id="bili-dl-format-pills" class="bili-dl-format-pills">
                 <button type="button" class="bili-dl-pill active" data-format="mp4">MP4 视频</button>
                 <button type="button" class="bili-dl-pill" data-format="m4a">M4A 音频</button>
