@@ -1176,7 +1176,7 @@
     });
   }
 
-  async function handleDownload(aid, cid, qn, title, jobId, filenameBase, streamPreference = 'high-bitrate') {
+  async function handleDownload(aid, cid, qn, title, jobId, filenameBase, streamPreference = 'high-bitrate', includeAudioBlob = false) {
     const session = createSession(jobId);
     try {
       if (session.cancelled) throw new Error('下载已取消');
@@ -1282,6 +1282,9 @@
           merged: true,
           filename: base + '.mp4',
           blob: mp4Blob,
+          // 列表的“视频+音频”可复用已下载的 DASH 音频轨保存 M4A，
+          // 不再为同一条视频重新请求一次音频 CDN。普通 MP4 下载不保留它。
+          audioBlob: includeAudioBlob ? aBlob : null,
           jobId: session.jobId
         };
       }
@@ -1341,7 +1344,7 @@
           const jobId = e.data.jobId || null;
           const result = e.data.audioOnly
             ? await handleAudioOnly(e.data.aid, e.data.cid, e.data.title, jobId, e.data.filenameBase)
-            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase, e.data.streamPreference);
+            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase, e.data.streamPreference, e.data.includeAudioBlob === true);
           reply(id, { type: 'OK', data: result });
           break;
         }

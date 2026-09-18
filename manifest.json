@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "__MSG_extDesc__",
-  "permissions": ["activeTab", "scripting", "storage", "downloads"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "clipboardWrite"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://*.bilivideo.com/*",
@@ -36,7 +36,11 @@
         "https://www.bilibili.com/list/*",
         "https://bilibili.com/list/*"
       ],
-      "js": ["content/content.js"],
+      "js": [
+        "shared/filename.js",
+        "shared/download-settings.js",
+        "content/content.js"
+      ],
       "css": ["content/content.css", "shared/design-system.css"],
       "run_at": "document_end"
     }

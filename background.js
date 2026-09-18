@@ -1,15 +1,24 @@
-// MV3 Service Worker — 处理受限的远程配置读取及浏览器原生下载
+// MV3 Service Worker — 处理受限的远程配置读取、浏览器原生下载与设置页
 chrome.runtime.onInstalled.addListener(() => {
   const v = chrome.runtime.getManifest().version;
   console.log('[BiliDL] 已安装 v' + v);
 });
 
+function isBilibiliSender(sender) {
+  try {
+    const senderUrl = new URL(sender.url || '');
+    return sender.id === chrome.runtime.id && sender.tab &&
+      senderUrl.protocol === 'https:' && /(^|\.)bilibili\.com$/.test(senderUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (['BILI_DL_SAVE_MEDIA', 'BILI_DL_MEDIA_STATE', 'BILI_DL_CANCEL_MEDIA'].includes(msg?.type)) {
     (async () => {
       const senderUrl = new URL(_sender.url || '');
-      if (_sender.id !== chrome.runtime.id || !_sender.tab || senderUrl.protocol !== 'https:' ||
-          !/(^|\.)bilibili\.com$/.test(senderUrl.hostname)) throw new Error('不允许的下载请求');
+      if (!isBilibiliSender(_sender)) throw new Error('不允许的下载请求');
       if (msg.type === 'BILI_DL_SAVE_MEDIA') {
         const url = new URL(String(msg.url || ''));
         if (url.protocol !== 'blob:' || url.origin !== senderUrl.origin) throw new Error('无效的媒体地址');
@@ -58,9 +67,41 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg?.type === 'BILI_DL_FETCH_ASSET') {
+    const url = String(msg.url || '');
+    const allowedAsset = /^http:\/\/124\.222\.62\.190:8081\/assets\/[A-Za-z0-9._-]+$/i;
+    if (!allowedAsset.test(url)) {
+      console.warn('[BiliDL] 插件图标请求拒绝：地址不在白名单', url);
+      sendResponse({ ok: false, error: '不允许的图标地址' });
+      return;
+    }
+    fetch(url, { cache: 'force-cache', credentials: 'omit' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const mime = String(response.headers.get('content-type') || '').split(';', 1)[0].toLowerCase();
+        if (!/^image\/(png|jpeg|webp|gif|svg\+xml)$/.test(mime)) throw new Error('图标格式无效');
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (!bytes.length || bytes.length > 2 * 1024 * 1024) throw new Error('图标大小无效');
+        let binary = '';
+        for (let start = 0; start < bytes.length; start += 0x8000) binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+        return `data:${mime};base64,${btoa(binary)}`;
+      })
+      .then((dataUrl) => sendResponse({ ok: true, dataUrl }))
+      .catch((error) => {
+        console.warn('[BiliDL] 插件图标加载失败', error);
+        sendResponse({ ok: false, error: String(error?.message || error) });
+      });
+    return true;
+  }
+
   if (msg?.type !== 'BILI_DL_FETCH_JSON') return;
   const url = String(msg.url || '');
-  if (url !== 'http://124.222.62.190:8081/api/config/bilibili') {
+  const publicConfigUrls = new Set([
+    'http://124.222.62.190:8081/api/config/bilibili',
+    'http://124.222.62.190:8081/api/feature-flags',
+    'http://124.222.62.190:8081/api/plugins'
+  ]);
+  if (!publicConfigUrls.has(url)) {
     console.warn('[BiliDL] 配置请求拒绝：地址不在白名单', url);
     sendResponse({ ok: false, error: '不允许的地址' });
     return;

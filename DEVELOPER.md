@@ -126,7 +126,7 @@ bilibili-downloader/
 
 ### 勿恢复的旧文件
 
-`lib/bili-api.js`、`lib/wbi.js`、`lib/ffmpeg/*`、`content/bili-api.js` — v1 已废弃。
+`lib/bili-api.js`、`lib/wbi.js`、`content/bili-api.js` — v1 已废弃（旧 `lib/ffmpeg/*` 残留已删除）。
 
 ---
 

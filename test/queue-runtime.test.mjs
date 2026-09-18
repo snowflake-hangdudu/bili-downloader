@@ -10,6 +10,8 @@ function queueHarness(overrides = {}) {
     queueRunning: false, queueCancelled: false, queuePaused: false, operationMode: null,
     activeJobs: new Map(), videoInfo: { pages: [{}, {}, {}] }, location: { href: 'https://www.bilibili.com/video/BVoriginal' },
     selectedQn: 64, selectedFormat: 'mp4', streamPreference: 'high-bitrate', qualities: [],
+    filenameTemplate: '{title} - {bvid} - {quality}',
+    buildFilenameBase: (info) => String(info?.title || 'video'),
     startBtn: {}, queueBtn: {}, queueLabelEl: {}, statusEl: { classList: { add() {} } },
     canStartCurrentDownload: () => true, isMultiPartVideo: () => true, getSelectedQualityLabel: () => '720P',
     syncJobListVisibility() {}, ensureMuxReady: async () => true, waitWhileQueuePaused: async () => {},

@@ -157,6 +157,21 @@ test('native save waits for complete, then releases Blob URL', async () => {
   assert.equal(h.calls.length, 3);
   assert.equal(h.revoked.length, 1);
 });
+test('Firefox saves the page Blob directly instead of handing it to the background', async () => {
+  const calls = [], revoked = [];
+  const link = { style: {}, click: () => calls.push('click'), remove: () => calls.push('remove') };
+  const c = vm.createContext({
+    browser: { runtime: { getBrowserInfo: () => Promise.resolve({ name: 'Firefox' }) } },
+    document: { createElement: () => link, documentElement: { appendChild: () => calls.push('append') } },
+    URL: { createObjectURL: () => 'blob:page', revokeObjectURL: (url) => revoked.push(url) },
+    setTimeout: (fn) => { fn(); return 1; },
+    EXT: { runtime: { sendMessage: async () => { throw new Error('Firefox must not call background save'); } } }
+  });
+  vm.runInContext(content.slice(content.indexOf('  async function downloadBlob'), content.indexOf('  function formatView')), c);
+  assert.equal(await c.downloadBlob(new Blob(['a']), 'a.mp4'), null);
+  assert.deepEqual(calls, ['append', 'click', 'remove']);
+  assert.deepEqual(revoked, ['blob:page']);
+});
 test('native interruption is failure, not successful download', async () => {
   const h = saveHarness([{ ok: true, downloadId: 1 }, { ok: true, state: 'interrupted', error: 'FILE_NO_SPACE' }]);
   await assert.rejects(h.save(new Blob(['a']), 'a.mp4'), /FILE_NO_SPACE/);

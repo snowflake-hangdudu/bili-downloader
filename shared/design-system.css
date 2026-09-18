@@ -379,7 +379,16 @@ body[data-theme="douyin"] .popup-header::after {
 
 /* ---- Video info card ---- */
 
-#bili-dl-panel[data-theme] .bili-dl-video-card,
+#bili-dl-panel[data-theme] .bili-dl-video-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
 #yt-dl-panel[data-theme] .yt-dl-video-card,
 .dl-kit[data-theme] .dy-dl-video-card,
 body[data-theme] .popup-video-card {
@@ -391,8 +400,19 @@ body[data-theme] .popup-video-card {
   background: var(--surface);
 }
 
+#bili-dl-panel[data-theme] .bili-dl-cover-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 96px;
+}
+
 #bili-dl-panel[data-theme] .bili-dl-cover,
-#bili-dl-panel[data-theme] .bili-dl-cover-wrap,
+#bili-dl-panel[data-theme] .bili-dl-cover-wrap {
+  width: 96px;
+  border-radius: 8px;
+}
+
 #yt-dl-panel[data-theme] .yt-dl-cover,
 #yt-dl-panel[data-theme] .yt-dl-cover-wrap,
 .dl-kit[data-theme] .dy-dl-cover,
@@ -403,6 +423,12 @@ body[data-theme] .popup-cover-wrap {
   border-radius: 6px;
 }
 
+#bili-dl-panel[data-theme] .bili-dl-cover-wrap {
+  height: 54px;
+  box-shadow: none;
+  background: #eef2f6;
+}
+
 #bili-dl-panel[data-theme] .bili-dl-cover,
 #yt-dl-panel[data-theme] .yt-dl-cover,
 .dl-kit[data-theme] .dy-dl-cover,
@@ -411,7 +437,26 @@ body[data-theme] .popup-cover {
   object-fit: cover;
 }
 
-#bili-dl-panel[data-theme] .bili-dl-video-title,
+#bili-dl-panel[data-theme] .bili-dl-video-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-video-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 #yt-dl-panel[data-theme] .yt-dl-video-title,
 .dl-kit[data-theme] .dy-dl-video-title,
 body[data-theme] .video-title {
@@ -426,7 +471,17 @@ body[data-theme] .video-title {
   word-break: break-word;
 }
 
-#bili-dl-panel[data-theme] .bili-dl-video-author,
+#bili-dl-panel[data-theme] .bili-dl-video-author {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: #5f6368;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #yt-dl-panel[data-theme] .yt-dl-video-author,
 .dl-kit[data-theme] .dy-dl-video-author,
 body[data-theme] .video-author {
@@ -454,8 +509,15 @@ body[data-theme] a.video-author:hover {
   color: var(--brand-strong);
 }
 
+#bili-dl-panel[data-theme] .bili-dl-video-sub {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: #747c89;
+}
+
 #bili-dl-panel[data-theme] .bili-dl-video-meta,
-#bili-dl-panel[data-theme] .bili-dl-video-sub,
 #yt-dl-panel[data-theme] .yt-dl-video-meta,
 #yt-dl-panel[data-theme] .yt-dl-video-sub,
 .dl-kit[data-theme] .dy-dl-video-sub,
@@ -466,8 +528,27 @@ body[data-theme] .video-sub {
   color: var(--text-muted);
 }
 
+#bili-dl-panel[data-theme] .bili-dl-video-meta {
+  margin-top: 0;
+}
+
 /* Cover download — secondary action */
-#bili-dl-panel[data-theme] .bili-dl-cover-download,
+#bili-dl-panel[data-theme] .bili-dl-cover-download {
+  position: static;
+  box-sizing: border-box;
+  width: 96px;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
 #yt-dl-panel[data-theme] .yt-dl-cover-download,
 .dl-kit[data-theme] .dy-dl-cover-download {
   box-sizing: border-box;
@@ -484,7 +565,12 @@ body[data-theme] .video-sub {
   cursor: pointer;
 }
 
-#bili-dl-panel[data-theme] .bili-dl-cover-download:hover,
+#bili-dl-panel[data-theme] .bili-dl-cover-download:hover {
+  background: #f7fbff;
+  border-color: #9ddcfa;
+  color: var(--brand-strong);
+}
+
 #yt-dl-panel[data-theme] .yt-dl-cover-download:hover,
 .dl-kit[data-theme] .dy-dl-cover-download:hover {
   background: var(--brand-soft);
@@ -747,12 +833,85 @@ body[data-theme] .popup-btn-outline:hover:not(:disabled) {
   filter: none;
 }
 
-/* ---- Footer weak entries ---- */
+/* ---- Footer chips (equal row, no mid gap) ---- */
 
+#bili-dl-panel[data-theme] .bili-dl-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-top: 1px solid #e8eaed;
+  color: #5f6368;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-links,
+#bili-dl-panel[data-theme] .bili-dl-footer-meta {
+  display: contents;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-link,
 #bili-dl-panel[data-theme] .bili-dl-faq-link,
 #bili-dl-panel[data-theme] .bili-dl-privacy-link,
-#bili-dl-panel[data-theme] .bili-dl-feedback,
-#bili-dl-panel[data-theme] .bili-dl-footer-link,
+#bili-dl-panel[data-theme] .bili-dl-footer-action,
+#bili-dl-panel[data-theme] .bili-dl-feedback {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-link svg,
+#bili-dl-panel[data-theme] .bili-dl-footer-action svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  opacity: 0.9;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-plugins {
+  border-color: var(--brand-border, rgba(0, 174, 236, 0.42));
+  background: var(--brand-soft, #eaf9ff);
+  color: var(--brand-strong, #007fba);
+  font-weight: 600;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-link:hover,
+#bili-dl-panel[data-theme] .bili-dl-faq-link:hover,
+#bili-dl-panel[data-theme] .bili-dl-privacy-link:hover,
+#bili-dl-panel[data-theme] .bili-dl-footer-action:hover,
+#bili-dl-panel[data-theme] .bili-dl-feedback:hover,
+#bili-dl-panel[data-theme] .bili-dl-feedback.is-copied {
+  background: #f7fbff;
+  border-color: #9ddcfa;
+  color: var(--brand-strong);
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer-plugins:hover {
+  background: #dff4ff;
+  border-color: var(--brand, #00aeec);
+  color: var(--brand-strong, #007fba);
+}
+
 #yt-dl-panel[data-theme] .yt-dl-faq-link,
 #yt-dl-panel[data-theme] .yt-dl-privacy-link,
 #yt-dl-panel[data-theme] .yt-dl-feedback,
@@ -780,10 +939,6 @@ body[data-theme] .popup-footer-link {
   cursor: pointer;
 }
 
-#bili-dl-panel[data-theme] .bili-dl-faq-link:hover,
-#bili-dl-panel[data-theme] .bili-dl-privacy-link:hover,
-#bili-dl-panel[data-theme] .bili-dl-feedback:hover,
-#bili-dl-panel[data-theme] .bili-dl-footer-link:hover,
 #yt-dl-panel[data-theme] .yt-dl-faq-link:hover,
 #yt-dl-panel[data-theme] .yt-dl-privacy-link:hover,
 #yt-dl-panel[data-theme] .yt-dl-feedback:hover,
@@ -798,14 +953,32 @@ body[data-theme] .popup-footer-link:hover {
   border-color: transparent;
 }
 
-#bili-dl-panel[data-theme] .bili-dl-feedback,
+/* Popup uses text links rather than footer chips.  Keep this selector more
+   specific than the shared footer primitive, because this file is loaded
+   after popup.css. */
+body[data-theme] .popup-footer .popup-footer-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary, #52525b);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+body[data-theme] .popup-footer .popup-footer-link:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--brand-strong, #007fba);
+}
+
 #yt-dl-panel[data-theme] .yt-dl-feedback,
 .dl-kit[data-theme] .dl-kit-feedback {
   background: var(--footer-bg, #f3f4f6);
   color: var(--text-secondary);
 }
 
-#bili-dl-panel[data-theme] .bili-dl-footer,
 .dl-kit[data-theme] .dl-kit-footer {
   background: var(--footer-bg, #f3f4f6);
   border-top: none;
@@ -820,6 +993,91 @@ body[data-theme] button:focus-visible,
 body[data-theme] a:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* Related plugins sheet — size/spacing only; keep cards visually equal */
+#bili-dl-panel[data-theme] .bili-dl-page-back {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-color: #e8eaed;
+  background: #f8f9fa;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-page-back:hover {
+  background: #f1f3f5;
+  border-color: #dce0e5;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-page-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugins-list {
+  gap: 8px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-row {
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 84px;
+  padding: 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+  transform: none;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-row:hover {
+  border-color: #9ddcfa;
+  background: #f7fbff;
+  box-shadow: none;
+  transform: none;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-icon,
+#bili-dl-panel[data-theme] .bili-dl-plugin-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-row strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-copy > span {
+  color: #747c89;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-action {
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--brand-strong, #007fba);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-plugin-row:hover .bili-dl-plugin-action {
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-page.is-plugins .bili-dl-page-title,
+#bili-dl-panel[data-theme] .bili-dl-page.is-plugins .bili-dl-info-date {
+  display: none !important;
 }
 
 /* ---- Panel width ---- */

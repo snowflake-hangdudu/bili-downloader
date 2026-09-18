@@ -13,10 +13,16 @@
   const ICON_URL = EXT.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
   const FAQ_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/faq.html';
   const PRIVACY_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/';
-  const CONTENT_JSON_URL = 'http://124.222.62.190:8081/api/config/bilibili';
+  const CONFIG_BASE_URL = 'http://124.222.62.190:8081';
+  const CONTENT_JSON_URL = `${CONFIG_BASE_URL}/api/config/bilibili`;
+  const FEATURE_FLAGS_URL = `${CONFIG_BASE_URL}/api/feature-flags`;
+  const PLUGINS_JSON_URL = `${CONFIG_BASE_URL}/api/plugins`;
   const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
+  const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v2';
   const DOWNLOAD_PREFS_KEY = 'biliDlDownloadPrefs_v1';
   const CONTENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  // @pack:remote-catalog-debug-refresh -- release packers replace true with false.
+  const REMOTE_CATALOG_DEBUG_REFRESH = true;
   const DEFAULT_REMOTE_CONTENT = {
     notice: { enabled: true, title: '公告', updated: '', body: '暂未获取到最新公告，请稍后再试。\n\n下载功能不受影响。' },
     coop: { enabled: true, title: '开发合作', updated: '', body: '接浏览器插件定制开发。\n\n有合作意向请联系 QQ：748604487\n邮箱：hangdudu0@agent.qq.com\n请备注「插件开发」，并简单说明需求。' },
@@ -25,6 +31,29 @@
   const STORE_RATING_KEY = 'biliDlStoreRating';
   const STORE_RATING_MIN_SUCCESS = 3;
   // 文案与 youtube-downloader 保持一致；仅评分状态随版本重置
+
+  async function copyTextToClipboard(text) {
+    const value = String(text ?? '');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+    } catch {
+      // Content script may lack transient focus; fall back below.
+    }
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;left:8px;top:8px;width:12px;height:12px;opacity:0.02;z-index:2147483647';
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, value.length);
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) throw new Error('execCommand copy failed');
+  }
 
   let muxReadyPromise = null;
   const MERGE_WORKER_URL = EXT.runtime.getURL('lib/m4s-mux-worker.js');
@@ -231,6 +260,27 @@
     const mediaType = extension === 'm4a' ? 'audio/mp4' : 'video/mp4';
     const mediaBlob = blob.type === mediaType ? blob : blob.slice(0, blob.size, mediaType);
     const url = URL.createObjectURL(mediaBlob);
+    // Firefox keeps page Blob URLs scoped to the page principal. Let the page
+    // initiate this local save instead of asking the extension background to
+    // re-open the Blob URL with a different principal.
+    const isFirefox = typeof browser !== 'undefined'
+      && typeof browser.runtime?.getBrowserInfo === 'function';
+    if (isFirefox) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.documentElement.appendChild(link);
+      try {
+        if (shouldCancel()) throw new Error('下载已取消');
+        link.click();
+        return null;
+      } finally {
+        link.remove();
+        // The browser needs a short turn to attach the local Blob to its save.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    }
     let downloadId;
     try {
       const started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
@@ -288,10 +338,11 @@
   let qualities = [];
   let selectedQn = 0;
   let selectedFormat = 'mp4'; // 'mp4' | 'm4a'
+  let listDownloadKind = 'video'; // video | audio | both
   let qualityStrategy = 'exact'; // exact | highest
   // Selects among Bilibili's existing streams of the same resolution; never re-encodes.
   const streamPreference = 'high-bitrate';
-  let filenameStyle = 'title-bvid-quality';
+  let filenameTemplate = (globalThis.BiliDlSettings && globalThis.BiliDlSettings.DEFAULTS.filenameTemplate) || '{title}';
   let pageIndex = 0;
   let isOpen = false;
   let reqId = 0;
@@ -324,7 +375,7 @@
     const kept = [];
     const seen = new Set();
     for (const h of (items || []).filter(Boolean)) {
-      const fmt = h.format === 'm4a' ? 'm4a' : 'mp4';
+      const fmt = h.format === 'm4a' ? 'm4a' : (h.format === 'mp4-video' ? 'mp4-video' : 'mp4');
       const dedupeKey = `${historyPartKey(h)}|${fmt}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
@@ -510,14 +561,6 @@
                 <option value="compatible">兼容优先</option>
               </select>
             </label>
-            <label class="bili-dl-filename-row">文件名
-              <select id="bili-dl-filename-style" aria-label="下载文件名规则">
-                <option value="title">仅标题</option>
-                <option value="title-bvid">标题 + BV 号</option>
-                <option value="title-bvid-quality">标题 + BV 号 + 清晰度</option>
-                <option value="detailed">标题 + UP 主 + BV 号 + 分 P + 清晰度</option>
-              </select>
-            </label>
             <p id="bili-dl-filename-preview" class="bili-dl-filename-preview" aria-live="polite"></p>
 
             <div id="bili-dl-estimate" class="bili-dl-estimate hidden">
@@ -533,8 +576,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
               <span id="bili-dl-queue-label">队列下载全部分 P</span>
             </button>
-            <button id="bili-dl-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">暂停全部</button>
-            <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
+            <div id="bili-dl-queue-actions" class="bili-dl-queue-actions hidden">
+              <button id="bili-dl-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue">暂停全部</button>
+              <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue bili-dl-btn-danger">取消整队</button>
+            </div>
             <div id="bili-dl-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
           </div>
@@ -550,6 +595,14 @@
                   <option value="highest">始终最高可用</option>
                 </select>
               </label>
+            </div>
+            <div id="bili-dl-list-download-kind-row" class="bili-dl-list-download-kind-row" role="group" aria-label="列表下载内容">
+              <div class="bili-dl-section-head">下载内容</div>
+              <div id="bili-dl-list-download-kind" class="bili-dl-list-download-kind">
+                <button type="button" class="active" data-list-download-kind="video">仅视频</button>
+                <button type="button" data-list-download-kind="audio">仅音频</button>
+                <button type="button" data-list-download-kind="both">视频+音频</button>
+              </div>
             </div>
             <label class="bili-dl-stream-preference-row">视频质量
               <select id="bili-dl-list-stream-preference" aria-label="列表视频流选择偏好" title="仅在同一清晰度的原始视频流之间选择">
@@ -576,11 +629,15 @@
             <div id="bili-dl-list-items" class="bili-dl-list-items"></div>
             <button id="bili-dl-list-load-more" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">继续加载</button>
             <button id="bili-dl-list-start" type="button" class="bili-dl-btn" disabled>下载已选视频</button>
-            <button id="bili-dl-list-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">暂停全部</button>
-            <button id="bili-dl-list-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">取消整队</button>
+            <div id="bili-dl-list-queue-actions" class="bili-dl-queue-actions hidden">
+              <button id="bili-dl-list-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue">暂停全部</button>
+              <button id="bili-dl-list-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue bili-dl-btn-danger">取消整队</button>
+            </div>
             <div id="bili-dl-list-job-list" class="bili-dl-job-list hidden"></div>
-            <button id="bili-dl-list-retry-failed" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">重试失败视频</button>
-            <p id="bili-dl-list-status" class="bili-dl-list-status hidden" aria-live="polite"></p>
+            <div id="bili-dl-list-result" class="bili-dl-list-result hidden">
+              <p id="bili-dl-list-status" class="bili-dl-list-status" aria-live="polite"></p>
+              <button id="bili-dl-list-retry-failed" type="button" class="bili-dl-list-retry hidden">重试未完成</button>
+            </div>
           </div>
           <div id="bili-dl-store-rating" class="bili-dl-store-rating hidden" role="note" aria-live="polite">
             <p class="bili-dl-store-rating-title">下载搞定 ⭐ 给个好评呗</p>
@@ -594,13 +651,26 @@
           </div>
           <div class="bili-dl-footer">
             <div class="bili-dl-footer-links">
-              <button type="button" class="bili-dl-faq-link" data-sheet="notice">公告</button>
-              <button type="button" class="bili-dl-faq-link" data-sheet="coop">开发合作</button>
-              <a class="bili-dl-faq-link" href="${FAQ_URL}" target="_blank" rel="noopener">常见问题</a>
-              <a class="bili-dl-privacy-link" href="${PRIVACY_URL}" target="_blank" rel="noopener">隐私政策</a>
-              <button type="button" class="bili-dl-faq-link" data-sheet="diagnostics">诊断日志</button>
-              <button type="button" class="bili-dl-faq-link" data-sheet="tasks">任务中心</button>
-              <a class="bili-dl-feedback" href="mailto:hangdudu0@agent.qq.com?subject=B站视频下载助手反馈">反馈邮箱：hangdudu0@agent.qq.com</a>
+              <button type="button" class="bili-dl-footer-link bili-dl-footer-plugins" data-sheet="plugins" title="相关插件">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                相关插件
+              </button>
+              <button type="button" class="bili-dl-footer-link bili-dl-footer-notice" data-sheet="notice" title="公告">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h1l6 4V6L5 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg>
+                公告
+              </button>
+              <button type="button" class="bili-dl-footer-link" data-sheet="diagnostics">诊断日志</button>
+              <button type="button" class="bili-dl-footer-link" data-sheet="tasks">任务中心</button>
+            </div>
+            <div class="bili-dl-footer-meta">
+              <button type="button" class="bili-dl-footer-action" data-sheet="settings" title="设置">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+                设置
+              </button>
+              <button type="button" class="bili-dl-footer-action bili-dl-feedback" title="点击复制反馈邮箱 hangdudu0@agent.qq.com" aria-label="复制反馈邮箱">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span class="bili-dl-feedback-label">反馈</span>
+              </button>
             </div>
           </div>
           </div>
@@ -632,10 +702,14 @@
     const listLoadMoreBtn = panel.querySelector('#bili-dl-list-load-more');
     const listStartBtn = panel.querySelector('#bili-dl-list-start');
     const listPillsEl = panel.querySelector('#bili-dl-list-quality-pills');
+    const listQualitySection = listPillsEl?.closest('.bili-dl-section');
+    const listDownloadKindEl = panel.querySelector('#bili-dl-list-download-kind');
     const listQueuePauseBtn = panel.querySelector('#bili-dl-list-queue-pause');
     const listQueueCancelBtn = panel.querySelector('#bili-dl-list-queue-cancel');
+    const listQueueActionsEl = panel.querySelector('#bili-dl-list-queue-actions');
     const listJobListEl = panel.querySelector('#bili-dl-list-job-list');
     const listRetryFailedBtn = panel.querySelector('#bili-dl-list-retry-failed');
+    const listResultEl = panel.querySelector('#bili-dl-list-result');
     const listStatusEl = panel.querySelector('#bili-dl-list-status');
     const videoCard = panel.querySelector('#bili-dl-video-card');
     const coverSk = panel.querySelector('#bili-dl-cover-sk');
@@ -659,7 +733,6 @@
     ].filter(Boolean);
     const formatPillsEl = panel.querySelector('#bili-dl-format-pills');
     const formatRowEl = panel.querySelector('#bili-dl-format-row');
-    const filenameStyleEl = panel.querySelector('#bili-dl-filename-style');
     const filenamePreviewEl = panel.querySelector('#bili-dl-filename-preview');
     const estimateEl = panel.querySelector('#bili-dl-estimate');
     const estimateText = panel.querySelector('#bili-dl-estimate-text');
@@ -671,6 +744,7 @@
     const queueBtn = panel.querySelector('#bili-dl-queue-all');
     const queuePauseBtn = panel.querySelector('#bili-dl-queue-pause');
     const queueCancelBtn = panel.querySelector('#bili-dl-queue-cancel');
+    const queueActionsEl = panel.querySelector('#bili-dl-queue-actions');
     const queueLabelEl = panel.querySelector('#bili-dl-queue-label');
     const jobListEl = panel.querySelector('#bili-dl-job-list');
     const statusEl = panel.querySelector('#bili-dl-status');
@@ -744,6 +818,10 @@
 
     let remoteContent = { ...DEFAULT_REMOTE_CONTENT };
     let remoteContentLoadPromise = null;
+    let relatedPlugins = [];
+    let pluginCatalogLoaded = false;
+    let pluginCatalogLoadPromise = null;
+    const pluginIconLoadCache = new Map();
     const toLines = (value) => Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : String(value || '').split(/\n+/).map((item) => item.trim()).filter(Boolean);
     function fillPlainBody(el, text) { clearNode(el); toLines(text).forEach((line) => appendTextElement(el, 'p', '', line)); }
     function appendNoticeSection(el, title, value) { const lines = toLines(value); if (!lines.length) return; const section = document.createElement('section'); section.className = 'bili-dl-notice-section'; appendTextElement(section, 'h4', 'bili-dl-notice-section-title', title); const list = document.createElement('ul'); list.className = 'bili-dl-notice-list'; lines.forEach((line) => appendTextElement(list, 'li', '', line)); section.appendChild(list); el.appendChild(section); }
@@ -764,6 +842,39 @@
       const key = detectBrowserStore();
       return httpsUrl(rating[key]) || httpsUrl(rating.url);
     }
+    function pluginStoreUrl(plugin) {
+      const directUrl = httpsUrl(plugin?.stores?.[detectBrowserStore()]);
+      if (directUrl) return { url: directUrl, label: '前往安装' };
+      const name = String(plugin?.name || '').trim();
+      if (!name) return null;
+      const encodedName = encodeURIComponent(name);
+      const browser = detectBrowserStore();
+      const searchUrls = {
+        edge: `https://microsoftedge.microsoft.com/addons/search/${encodedName}`,
+        chrome: `https://chromewebstore.google.com/search/${encodedName}`,
+        firefox: `https://addons.mozilla.org/firefox/search/?q=${encodedName}`
+      };
+      return { url: searchUrls[browser] || searchUrls.edge, label: '前往安装' };
+    }
+    function pluginIconUrl(plugin) {
+      try {
+        const url = new URL(String(plugin?.iconUrl || ''));
+        const base = new URL(CONFIG_BASE_URL);
+        return url.origin === base.origin && url.pathname.startsWith('/assets/') ? url.href : '';
+      } catch {
+        return '';
+      }
+    }
+    function loadPluginIcon(iconUrl) {
+      if (!iconUrl) return Promise.resolve('');
+      if (!pluginIconLoadCache.has(iconUrl)) {
+        const request = EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_ASSET', url: iconUrl })
+          .then((response) => response?.ok && typeof response.dataUrl === 'string' ? response.dataUrl : '')
+          .catch(() => '');
+        pluginIconLoadCache.set(iconUrl, request);
+      }
+      return pluginIconLoadCache.get(iconUrl);
+    }
     function ratingEnabled() {
       const rating = remoteContent.rating || {};
       return rating.enabled === true && !!ratingUrl();
@@ -781,6 +892,11 @@
     function ratingMinSuccess() { const n = Number(remoteContent.rating?.minSuccess); return n > 0 ? n : STORE_RATING_MIN_SUCCESS; }
     function applyRemoteButtons() {
       panel.querySelectorAll('[data-sheet]').forEach((btn) => {
+        if (btn.dataset.sheet === 'plugins') {
+          // Once the catalog is known, do not expose an empty related-plugins entry.
+          btn.classList.toggle('hidden', pluginCatalogLoaded && relatedPlugins.length === 0);
+          return;
+        }
         const item = remoteContent[btn.dataset.sheet];
         btn.classList.toggle('hidden', item?.enabled === false);
       });
@@ -793,8 +909,98 @@
       return { data, fetchedAt: Number(record.fetchedAt) || 0 };
     }
 
+    function getCachedPluginCatalog(record) {
+      const flags = record?.data?.flags;
+      const plugins = record?.data?.plugins;
+      if (!flags || typeof flags !== 'object' || Array.isArray(flags) || !Array.isArray(plugins)) return null;
+      return { data: { flags, plugins }, fetchedAt: Number(record.fetchedAt) || 0 };
+    }
+
+    function isRelatedPluginsMasterOn(flags) {
+      if (!flags || typeof flags !== 'object') return false;
+      if (flags.relatedPluginsVisible === true) return true;
+      // Stale local cache during migration from bilibiliSeriesVisible.
+      if (flags.relatedPluginsVisible == null && flags.bilibiliSeriesVisible === true) return true;
+      return false;
+    }
+
+    function normalizeRelatedPlugins(flags, plugins) {
+      // Server should already fold the master switch into each item’s visible
+      // field; keep an explicit flag check as defense-in-depth for stale/mixed data.
+      if (!isRelatedPluginsMasterOn(flags)) return [];
+      return plugins
+        .filter((plugin) => plugin && plugin.visible === true && plugin.id !== 'bilibili')
+        .map((plugin) => ({
+          id: String(plugin.id || ''),
+          name: String(plugin.name || '相关插件'),
+          description: String(plugin.description || ''),
+          iconUrl: String(plugin.iconUrl || ''),
+          stores: plugin.stores && typeof plugin.stores === 'object' ? plugin.stores : {}
+        }))
+        .filter((plugin) => plugin.id);
+    }
+
+    function applyPluginCatalog(data) {
+      relatedPlugins = normalizeRelatedPlugins(data.flags, data.plugins);
+      pluginCatalogLoaded = true;
+      applyRemoteButtons();
+      return relatedPlugins;
+    }
+
     function formatCacheAge(fetchedAt) {
       return `${Math.max(0, Math.floor((Date.now() - fetchedAt) / 60000))} 分钟`;
+    }
+
+    async function loadPluginCatalogNow() {
+      let cached = null;
+      try {
+        const stored = await EXT.storage.local.get(PLUGIN_CATALOG_CACHE_KEY);
+        cached = getCachedPluginCatalog(stored[PLUGIN_CATALOG_CACHE_KEY]);
+        if (!REMOTE_CATALOG_DEBUG_REFRESH && cached?.fetchedAt && Date.now() - cached.fetchedAt < CONTENT_CACHE_TTL_MS) {
+          applyPluginCatalog(cached.data);
+          debugLog('相关插件', `已使用 12 小时缓存（缓存 ${formatCacheAge(cached.fetchedAt)}），未请求接口`);
+          return relatedPlugins;
+        }
+        if (REMOTE_CATALOG_DEBUG_REFRESH) debugLog('相关插件', '调试模式：忽略本地缓存并立即刷新插件目录');
+        else if (cached) debugLog('相关插件', cached.fetchedAt ? '12 小时缓存已过期，准备请求插件目录' : '旧版插件缓存无时间信息，准备请求接口');
+        else debugLog('相关插件', '无插件目录缓存，准备请求接口');
+      } catch (error) {
+        debugLog('相关插件', `读取插件目录缓存失败，准备请求接口：${error?.message || error}`);
+      }
+
+      try {
+        const [flagsResp, pluginsResp] = await Promise.all([
+          EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: FEATURE_FLAGS_URL }),
+          EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: PLUGINS_JSON_URL })
+        ]);
+        if (!flagsResp?.ok || !pluginsResp?.ok) throw new Error(flagsResp?.error || pluginsResp?.error || '插件目录接口不可用');
+        const flags = flagsResp.data?.flags;
+        const plugins = pluginsResp.data;
+        if (!flags || typeof flags !== 'object' || Array.isArray(flags) || !Array.isArray(plugins)) throw new Error('插件目录返回格式无效');
+        const data = { flags, plugins };
+        await EXT.storage.local.set({ [PLUGIN_CATALOG_CACHE_KEY]: { data, fetchedAt: Date.now() } });
+        applyPluginCatalog(data);
+        debugLog('相关插件', `远程目录已加载：总开关 ${isRelatedPluginsMasterOn(flags) ? '开启' : '关闭'}，可展示 ${relatedPlugins.length} 个`);
+        return relatedPlugins;
+      } catch (error) {
+        debugLog('相关插件', `远程目录不可用：${error?.message || error}`);
+      }
+      if (cached) {
+        applyPluginCatalog(cached.data);
+        debugLog('相关插件', '接口获取失败，已使用过期本地插件目录缓存');
+      } else {
+        relatedPlugins = [];
+        pluginCatalogLoaded = false;
+        applyRemoteButtons();
+      }
+      return relatedPlugins;
+    }
+
+    function loadPluginCatalog() {
+      if (!pluginCatalogLoadPromise) {
+        pluginCatalogLoadPromise = loadPluginCatalogNow().finally(() => { pluginCatalogLoadPromise = null; });
+      }
+      return pluginCatalogLoadPromise;
     }
 
     async function loadRemoteContentNow() {
@@ -857,7 +1063,281 @@
         menu.style.height = h + 'px';
       }
     }
+    function fillSettingsSheet(el) {
+      const Filename = globalThis.BiliDlFilename;
+      const Settings = globalThis.BiliDlSettings;
+      clearNode(el);
+      if (!Filename || !Settings) {
+        appendTextElement(el, 'p', '', '设置模块未加载，请刷新页面后重试。');
+        return;
+      }
+
+      const root = document.createElement('div');
+      root.className = 'bili-dl-settings';
+
+      const presetRow = document.createElement('label');
+      presetRow.className = 'bili-dl-settings-row';
+      appendTextElement(presetRow, 'span', '', '文件名');
+      const preset = document.createElement('select');
+      preset.className = 'bili-dl-settings-select';
+      preset.setAttribute('aria-label', '文件名规则');
+      [
+        ['title', '默认（仅标题）'],
+        ['title-bvid', '标题 + BV'],
+        ['title-bvid-quality', '标题 + BV + 清晰度'],
+        ['detailed', '标题 + UP + BV + 清晰度'],
+        ['custom', '自定义…']
+      ].forEach(([value, label]) => {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        preset.appendChild(opt);
+      });
+      presetRow.appendChild(preset);
+      root.appendChild(presetRow);
+
+      const customBlock = document.createElement('div');
+      customBlock.className = 'bili-dl-settings-custom';
+      customBlock.hidden = true;
+
+      const templateInput = document.createElement('input');
+      templateInput.type = 'text';
+      templateInput.className = 'bili-dl-settings-input';
+      templateInput.maxLength = 200;
+      templateInput.spellcheck = false;
+      templateInput.autocomplete = 'off';
+      templateInput.placeholder = '{title} - {bvid}';
+      templateInput.setAttribute('aria-label', '自定义文件名模板');
+      customBlock.appendChild(templateInput);
+
+      const chips = document.createElement('div');
+      chips.className = 'bili-dl-settings-chips';
+      chips.setAttribute('aria-label', '插入变量');
+      Filename.VARIABLES.forEach((item) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'bili-dl-settings-chip';
+        chip.textContent = item.label;
+        chip.title = `{${item.key}} · ${item.tip}`;
+        chip.onclick = () => {
+          const start = templateInput.selectionStart ?? templateInput.value.length;
+          const end = templateInput.selectionEnd ?? templateInput.value.length;
+          const token = `{${item.key}}`;
+          templateInput.value = `${templateInput.value.slice(0, start)}${token}${templateInput.value.slice(end)}`;
+          const pos = start + token.length;
+          templateInput.focus();
+          templateInput.setSelectionRange(pos, pos);
+          syncPresetFromTemplate();
+          refreshPreview();
+          queueSave();
+        };
+        chips.appendChild(chip);
+      });
+      customBlock.appendChild(chips);
+      root.appendChild(customBlock);
+
+      const preview = appendTextElement(root, 'p', 'bili-dl-settings-preview', '—');
+      const error = appendTextElement(root, 'p', 'bili-dl-settings-error', '');
+      error.hidden = true;
+
+      const foot = document.createElement('div');
+      foot.className = 'bili-dl-settings-foot';
+      const status = document.createElement('span');
+      status.className = 'bili-dl-settings-status';
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'bili-dl-settings-reset';
+      resetBtn.textContent = '恢复默认';
+      foot.append(status, resetBtn);
+      root.appendChild(foot);
+      el.appendChild(root);
+
+      let saveTimer = 0;
+
+      function matchPreset(template) {
+        const value = String(template || '').trim();
+        for (const [key, tpl] of Object.entries(Filename.PRESETS)) {
+          if (tpl === value) return key;
+        }
+        return 'custom';
+      }
+
+      function syncCustomVisibility() {
+        customBlock.hidden = preset.value !== 'custom';
+      }
+
+      function syncPresetFromTemplate() {
+        preset.value = matchPreset(templateInput.value.trim());
+        syncCustomVisibility();
+      }
+
+      function currentTemplate() {
+        if (preset.value !== 'custom' && Filename.PRESETS[preset.value]) {
+          return Filename.PRESETS[preset.value];
+        }
+        return templateInput.value.trim();
+      }
+
+      function refreshPreview() {
+        const check = Filename.validateTemplate(currentTemplate());
+        if (!check.ok) {
+          error.hidden = false;
+          error.textContent = check.error;
+          preview.textContent = '—';
+          return false;
+        }
+        error.hidden = true;
+        error.textContent = '';
+        const videoName = Filename.withExtension(
+          Filename.renderTemplate(check.template, Settings.SAMPLE_META, {
+            format: 'mp4',
+            qualityLabel: '1080P',
+            index: 2
+          }),
+          'mp4'
+        );
+        const audioName = Filename.withExtension(
+          Filename.renderTemplate(check.template, Settings.SAMPLE_META, {
+            format: 'm4a',
+            qualityLabel: '音频',
+            index: 2
+          }),
+          'm4a'
+        );
+        preview.textContent = `预览：${videoName}  ·  ${audioName}`;
+        return check.template;
+      }
+
+      function applyForm(settings) {
+        const template = settings.filenameTemplate || Settings.DEFAULTS.filenameTemplate;
+        templateInput.value = template;
+        preset.value = matchPreset(template);
+        syncCustomVisibility();
+        refreshPreview();
+      }
+
+      async function persist(showOk) {
+        const template = refreshPreview();
+        if (!template) {
+          status.textContent = '模板无效';
+          return;
+        }
+        try {
+          const saved = await Settings.saveSettings({
+            filenameTemplate: template
+          });
+          applyFilenameSettings(saved);
+          if (showOk) status.textContent = '已保存';
+          else status.textContent = '';
+        } catch (err) {
+          status.textContent = err?.message || '保存失败';
+        }
+      }
+
+      function queueSave() {
+        status.textContent = '';
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => { persist(true); }, 280);
+      }
+
+      preset.onchange = () => {
+        if (preset.value !== 'custom' && Filename.PRESETS[preset.value]) {
+          templateInput.value = Filename.PRESETS[preset.value];
+        } else if (preset.value === 'custom' && Filename.PRESETS[matchPreset(templateInput.value)]) {
+          // keep current text for editing
+        }
+        syncCustomVisibility();
+        refreshPreview();
+        queueSave();
+      };
+      templateInput.oninput = () => {
+        syncPresetFromTemplate();
+        refreshPreview();
+        queueSave();
+      };
+      resetBtn.onclick = async () => {
+        clearTimeout(saveTimer);
+        try {
+          const defaults = await Settings.resetSettings();
+          applyFilenameSettings(defaults);
+          applyForm(defaults);
+          status.textContent = '已恢复默认';
+        } catch (err) {
+          status.textContent = err?.message || '重置失败';
+        }
+      };
+
+      Settings.loadSettings().then(applyForm).catch((err) => {
+        status.textContent = err?.message || '加载失败';
+      });
+    }
+
     function renderInfoSheet(key, item) {
+      pageEl?.classList.toggle('is-plugins', key === 'plugins');
+      if (key === 'settings') {
+        infoTitle.textContent = '设置';
+        infoDate.textContent = '已入队任务不受影响';
+        infoDate.classList.remove('hidden');
+        fillSettingsSheet(infoBody);
+        return;
+      }
+      if (key === 'plugins') {
+        infoTitle.textContent = '相关插件';
+        infoDate.textContent = '';
+        infoDate.classList.add('hidden');
+        clearNode(infoBody);
+        const list = document.createElement('div');
+        list.className = 'bili-dl-plugins-list';
+        relatedPlugins.forEach((item) => {
+          const storeTarget = pluginStoreUrl(item);
+          const row = document.createElement('a');
+          row.className = 'bili-dl-plugin-row';
+          row.href = storeTarget.url;
+          row.target = '_blank';
+          row.rel = 'noopener';
+          row.title = `${storeTarget.label}：${item.name}`;
+          const icon = pluginIconUrl(item);
+          const iconWrap = document.createElement('span');
+          iconWrap.className = 'bili-dl-plugin-icon-wrap';
+          iconWrap.setAttribute('aria-hidden', 'true');
+          const fallback = document.createElement('span');
+          fallback.className = 'bili-dl-plugin-icon-fallback';
+          fallback.textContent = String(item.name || '插').trim().charAt(0) || '插';
+          iconWrap.appendChild(fallback);
+          if (icon) {
+            const image = document.createElement('img');
+            image.className = 'bili-dl-plugin-icon';
+            image.alt = '';
+            image.addEventListener('error', () => {
+              image.remove();
+              iconWrap.classList.add('is-fallback');
+            }, { once: true });
+            iconWrap.appendChild(image);
+            void loadPluginIcon(icon).then((dataUrl) => {
+              if (!dataUrl || !image.isConnected) {
+                image.remove();
+                iconWrap.classList.add('is-fallback');
+                return;
+              }
+              image.src = dataUrl;
+              iconWrap.classList.remove('is-fallback');
+            });
+          } else {
+            iconWrap.classList.add('is-fallback');
+          }
+          row.appendChild(iconWrap);
+          const copy = document.createElement('span');
+          copy.className = 'bili-dl-plugin-copy';
+          appendTextElement(copy, 'strong', '', item.name);
+          appendTextElement(copy, 'span', '', item.description || '实用浏览器扩展');
+          row.appendChild(copy);
+          appendTextElement(row, 'span', 'bili-dl-plugin-action', `${storeTarget.label} ›`);
+          list.appendChild(row);
+        });
+        if (relatedPlugins.length) infoBody.appendChild(list);
+        else appendTextElement(infoBody, 'p', 'bili-dl-plugins-note', pluginCatalogLoaded ? '当前没有可展示的相关插件。' : '正在读取相关插件目录…');
+        return;
+      }
       if (key === 'tasks') {
         infoTitle.textContent = '任务中心';
         infoDate.textContent = `本页任务 ${activeJobs.size} 个，最近记录 ${taskHistory.length} 条。`;
@@ -894,13 +1374,10 @@
         copy.textContent = '复制诊断报告';
         copy.onclick = async () => {
           try {
-            await navigator.clipboard.writeText(report);
+            await copyTextToClipboard(report);
             copy.textContent = '已复制';
           } catch {
-            textarea.focus();
-            textarea.select();
-            document.execCommand('copy');
-            copy.textContent = '已复制';
+            copy.textContent = '复制失败';
           }
         };
         infoBody.append(textarea, copy);
@@ -915,6 +1392,7 @@
     }
     function showHome() {
       pageEl?.classList.add('hidden');
+      pageEl?.classList.remove('is-plugins');
       homeEl?.classList.remove('hidden');
       menu.classList.remove('is-page');
       unlockMenuHeight();
@@ -928,7 +1406,12 @@
       pageEl?.classList.remove('hidden');
       menu.classList.add('is-page');
       pageEl.scrollTop = 0;
-      if (key === 'diagnostics' || key === 'tasks') return;
+      if (key === 'plugins') {
+        await loadPluginCatalog();
+        if (menu.classList.contains('is-page')) renderInfoSheet(key);
+        return;
+      }
+      if (key === 'diagnostics' || key === 'tasks' || key === 'settings') return;
       await loadRemoteContent();
       if (!menu.classList.contains('is-page')) return;
       renderInfoSheet(key, remoteContent[key]);
@@ -1051,7 +1534,21 @@
     }
 
     function saveDownloadPrefs() {
-      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, streamPreference, filenameStyle } }).catch(() => {});
+      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, streamPreference, listDownloadKind } }).catch(() => {});
+    }
+
+    function applyFilenameSettings(settings) {
+      if (!settings) return;
+      filenameTemplate = settings.filenameTemplate || filenameTemplate;
+      refreshFilenamePreview();
+    }
+
+    async function loadFilenameSettings() {
+      try {
+        if (globalThis.BiliDlSettings?.loadSettings) {
+          applyFilenameSettings(await globalThis.BiliDlSettings.loadSettings());
+        }
+      } catch { /* 设置读取失败不影响下载 */ }
     }
 
     function setFormat(fmt) {
@@ -1093,11 +1590,11 @@
         if (prefs.format === 'mp4' || prefs.format === 'm4a') setFormat(prefs.format);
         if (Number(prefs.qn) > 0) selectedQn = Number(prefs.qn);
         if (prefs.qualityStrategy === 'highest' || prefs.qualityStrategy === 'exact') qualityStrategy = prefs.qualityStrategy;
-        if (['title', 'title-bvid', 'title-bvid-quality', 'detailed'].includes(prefs.filenameStyle)) filenameStyle = prefs.filenameStyle;
+        if (['video', 'audio', 'both'].includes(prefs.listDownloadKind)) setListDownloadKind(prefs.listDownloadKind, false);
         qualityStrategyEls.forEach((el) => { el.value = qualityStrategy; });
         streamPreferenceEls.forEach((el) => { el.value = streamPreference; });
-        if (filenameStyleEl) filenameStyleEl.value = filenameStyle;
         syncQualitySelection();
+        await loadFilenameSettings();
         refreshFilenamePreview();
       } catch { /* 偏好读取失败不影响下载 */ }
     }
@@ -1120,8 +1617,18 @@
 
     function setListStatus(text, type = '') {
       listStatusEl.textContent = text;
-      listStatusEl.classList.toggle('hidden', !text);
+      listStatusEl.title = text;
       listStatusEl.dataset.type = type;
+      const progressText = /^正在下载\s+\d+\/\d+/.test(String(text || ''));
+      if (progressText && operationMode === 'list') {
+        const card = listJobListEl?.querySelector('.bili-dl-job-card:last-child .bili-dl-progress-sub');
+        if (card) {
+          card.textContent = text;
+          card.title = text;
+          card.classList.remove('hidden');
+        }
+      }
+      listResultEl?.classList.toggle('hidden', progressText || (!text && !lastListFailures.length));
     }
 
     function formatDuration(sec) {
@@ -1129,10 +1636,29 @@
       return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
     }
 
+    function listDownloadKindLabel(kind = listDownloadKind) {
+      if (kind === 'audio') return '仅音频';
+      if (kind === 'both') return '视频+音频';
+      return '仅视频';
+    }
+
+    function setListDownloadKind(kind, persist = true) {
+      if (!['video', 'audio', 'both'].includes(kind)) return;
+      listDownloadKind = kind;
+      listDownloadKindEl?.querySelectorAll('[data-list-download-kind]').forEach((button) => {
+        const active = button.dataset.listDownloadKind === kind;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      if (listQualitySection) listQualitySection.classList.toggle('hidden', kind === 'audio');
+      updateListSelection();
+      if (persist) saveDownloadPrefs();
+    }
+
     function updateListSelection() {
       const count = selectedListBvids.size;
       listStartBtn.disabled = !count || queueRunning;
-      listStartBtn.textContent = count ? `下载已选 ${count} 个视频` : '下载已选视频';
+      listStartBtn.textContent = count ? `下载已选 ${count} 个${listDownloadKindLabel()}` : `下载已选${listDownloadKindLabel()}`;
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       listSelectAllBtn.textContent = allSelected ? '取消全选' : '全选';
       listSelectAllBtn.disabled = !listItems.length;
@@ -1152,7 +1678,8 @@
       const count = lastListFailures.length;
       listRetryFailedBtn.classList.toggle('hidden', !count);
       listRetryFailedBtn.disabled = queueRunning;
-      listRetryFailedBtn.textContent = count ? `重试未完成视频（${count}）` : '重试未完成视频';
+      listRetryFailedBtn.textContent = count ? `重试未完成（${count}）` : '重试未完成';
+      listResultEl?.classList.toggle('hidden', !count && !listStatusEl.textContent);
     }
 
     function renderListItems() {
@@ -1363,7 +1890,7 @@
       if (selectedFormat === 'm4a') {
         try {
           // 先同步展示占位行，再用实际结果替换文字；高度不会在请求完成时突变。
-          estimateText.textContent = '预计大小：正在计算…';
+          estimateText.textContent = '⌛ 预计大小 正在计算…';
           estimateEl.classList.remove('hidden');
           const est = await agentCall('GET_ESTIMATE', {
             aid: videoInfo.aid,
@@ -1373,8 +1900,8 @@
           });
           if (requestId !== estimateRequestId || activeMode === 'list') return;
           currentEstimateBytes = Number(est.sizeBytes) || 0;
-          let text = '预计大小：约 ' + (est.sizeLabel || '未知');
-          if (est.estimateNote) text += '（' + est.estimateNote + '）';
+          let text = '⌛ 预计大小 ' + (est.sizeLabel || '未知') + ' · 仅供参考';
+          if (est.estimateNote) text += ' · ' + est.estimateNote;
           estimateText.textContent = text;
           estimateEl.classList.remove('hidden');
         } catch {
@@ -1389,7 +1916,7 @@
       }
       try {
         // 同上：保持预估行占位，切换到单视频页不会因异步结果二次改变高度。
-        estimateText.textContent = '预计大小：正在计算…';
+        estimateText.textContent = '⌛ 预计大小 正在计算…';
         estimateEl.classList.remove('hidden');
         const est = await agentCall('GET_ESTIMATE', {
           aid: videoInfo.aid,
@@ -1400,8 +1927,8 @@
         });
         if (requestId !== estimateRequestId || activeMode === 'list') return;
         currentEstimateBytes = Number(est.sizeBytes) || 0;
-        let text = '预计大小：约 ' + (est.sizeLabel || '未知');
-        if (est.estimateNote) text += '（' + est.estimateNote + '）';
+        let text = '⌛ 预计大小 ' + (est.sizeLabel || '未知') + ' · 仅供参考';
+        if (est.estimateNote) text += ' · ' + est.estimateNote;
         estimateText.textContent = text;
         estimateEl.classList.remove('hidden');
       } catch {
@@ -1437,8 +1964,8 @@
       cancelled: 'cancelled'
     });
     const taskUi = {
-      video: { jobList: jobListEl, queuePause: queuePauseBtn, queueCancel: queueCancelBtn, body: videoBodyEl },
-      list: { jobList: listJobListEl, queuePause: listQueuePauseBtn, queueCancel: listQueueCancelBtn, body: listBodyEl }
+      video: { jobList: jobListEl, queuePause: queuePauseBtn, queueCancel: queueCancelBtn, queueActions: queueActionsEl, body: videoBodyEl },
+      list: { jobList: listJobListEl, queuePause: listQueuePauseBtn, queueCancel: listQueueCancelBtn, queueActions: listQueueActionsEl, body: listBodyEl }
     };
 
     function getTaskUi(scope) {
@@ -1476,6 +2003,9 @@
     function classifyDownloadError(error) {
       const message = String(error?.message || error || '下载失败');
       if (/下载已取消|已取消|取消/.test(message)) return { type: 'cancelled', message: '下载已取消' };
+      if (/Could not establish connection|Receiving end does not exist|message port closed|Extension context invalidated/i.test(message)) {
+        return { type: 'extension', message: '扩展已更新，请刷新当前 B 站页面后重试' };
+      }
       if (/登录|权限|会员|大会员/.test(message)) return { type: 'permission', message };
       if (/清晰度|可下载/.test(message)) return { type: 'quality', message };
       if (/合成|合并|mux|remux/i.test(message)) return { type: 'merge', message };
@@ -1493,12 +2023,12 @@
 
     function syncJobListVisibility() {
       downloading = activeJobs.size > 0 || queueRunning;
+      listBodyEl?.classList.toggle('is-queue-running', queueRunning && operationMode === 'list');
       Object.entries(taskUi).forEach(([scope, ui]) => {
         const hasJobs = Array.from(activeJobs.values()).some((job) => jobScope(job) === scope);
         ui.jobList.classList.toggle('hidden', !hasJobs);
         const showQueueControls = queueRunning && operationMode === scope;
-        ui.queuePause.classList.toggle('hidden', !showQueueControls);
-        ui.queueCancel.classList.toggle('hidden', !showQueueControls);
+        ui.queueActions.classList.toggle('hidden', !showQueueControls);
         ui.queuePause.textContent = queuePaused ? '继续全部' : '暂停全部';
       });
     }
@@ -1590,14 +2120,16 @@
           <span class="bili-dl-progress-title"></span>
           <span class="bili-dl-progress-q"></span>
         </div>
+        <div class="bili-dl-progress-sub hidden"></div>
         <div class="bili-dl-progress-head">
           <span class="bili-dl-job-phase">准备下载</span>
           <span class="bili-dl-job-pct">0%</span>
+          <button type="button" class="bili-dl-job-cancel-inline">取消</button>
         </div>
         <div class="bili-dl-progress-track">
           <div class="bili-dl-progress-bar"></div>
         </div>
-        <div class="bili-dl-progress-actions">
+        <div class="bili-dl-progress-actions hidden">
           <button type="button" class="bili-dl-action-btn bili-dl-job-pause">暂停</button>
           <button type="button" class="bili-dl-action-btn danger bili-dl-job-cancel">取消</button>
         </div>
@@ -1610,6 +2142,7 @@
 
       const pauseBtn = el.querySelector('.bili-dl-job-pause');
       const cancelBtn = el.querySelector('.bili-dl-job-cancel');
+      const cancelInline = el.querySelector('.bili-dl-job-cancel-inline');
       const bar = el.querySelector('.bili-dl-progress-bar');
 
       pauseBtn.onclick = () => {
@@ -1627,10 +2160,12 @@
         }
       };
 
-      cancelBtn.onclick = () => {
+      const cancelJob = () => {
         job.cancelRequested = true;
         agentSignal('CANCEL_DOWNLOAD', { jobId: job.jobId });
       };
+      cancelBtn.onclick = cancelJob;
+      cancelInline.onclick = cancelJob;
 
       job.cardEl = el;
       job.paused = false;
@@ -1661,7 +2196,16 @@
     }
 
     function setJobActionsVisible(el, visible) {
-      el.querySelector('.bili-dl-progress-actions')?.classList.toggle('hidden', !visible);
+      const actions = el.querySelector('.bili-dl-progress-actions');
+      const inline = el.querySelector('.bili-dl-job-cancel-inline');
+      const isList = el.closest('#bili-dl-list-job-list');
+      if (isList) {
+        actions?.classList.add('hidden');
+        inline?.classList.toggle('hidden', !visible);
+        return;
+      }
+      actions?.classList.toggle('hidden', !visible);
+      inline?.classList.add('hidden');
     }
 
     updateProgress = (step, percent, received, total, jobId, meta = {}) => {
@@ -1966,15 +2510,34 @@
       return qualities.find((q) => q.qn === selectedQn)?.label || '';
     }
 
-    function buildFilenameBase(info, qn, format) {
-      const quality = format === 'm4a' ? '音频' : (qualities.find((q) => q.qn === qn)?.label || `${qn}P`);
+    function buildFilenameBase(info, qn, format, opts = {}) {
+      const Filename = globalThis.BiliDlFilename;
+      const qualityLabel = format === 'm4a'
+        ? '音频'
+        : (opts.qualityLabel || qualities.find((q) => q.qn === qn)?.label || `${qn}P`);
+      const template = opts.filenameTemplate || filenameTemplate;
+      const meta = {
+        title: info?.title,
+        author: info?.author,
+        bvid: info?.bvid,
+        part: opts.part != null ? opts.part : (info?.page || info?.part || ((opts.pageIndex != null ? opts.pageIndex : 0) + 1)),
+        partTitle: opts.partTitle || info?.partTitle || info?.title
+      };
+      if (Filename?.renderTemplate) {
+        try {
+          return Filename.renderTemplate(template, meta, {
+            format,
+            qualityLabel,
+            index: opts.index != null ? opts.index : 1,
+            createdAt: opts.createdAt || Date.now()
+          });
+        } catch {
+          /* fall through to safe default */
+        }
+      }
       const title = String(info?.title || 'bilibili-video').replace(/[\\/:*?"<>|\u0000-\u001F]/g, '_').trim() || 'bilibili-video';
       const bvid = info?.bvid ? `BV${String(info.bvid).replace(/^BV/i, '')}` : '';
-      const author = String(info?.author || '').replace(/[\\/:*?"<>|\u0000-\u001F]/g, '_').trim();
-      if (filenameStyle === 'title') return title;
-      if (filenameStyle === 'title-bvid') return [title, bvid].filter(Boolean).join(' - ');
-      if (filenameStyle === 'detailed') return [title, author, bvid, quality].filter(Boolean).join(' - ');
-      return [title, bvid, quality].filter(Boolean).join(' - ');
+      return [title, bvid, qualityLabel].filter(Boolean).join(' - ');
     }
 
     function refreshFilenamePreview() {
@@ -1984,7 +2547,20 @@
         return;
       }
       const ext = selectedFormat === 'm4a' ? 'm4a' : 'mp4';
-      filenamePreviewEl.textContent = `保存为：${buildFilenameBase(videoInfo, selectedQn, selectedFormat)}.${ext}`;
+      const base = buildFilenameBase(videoInfo, selectedQn, selectedFormat, {
+        pageIndex,
+        part: videoInfo.pages?.[pageIndex]?.page || (pageIndex + 1),
+        partTitle: videoInfo.pages?.[pageIndex]?.part || videoInfo.title,
+        index: 1
+      });
+      const label = document.createElement('span');
+      label.className = 'bili-dl-filename-preview-label';
+      label.textContent = '保存为：';
+      const filename = document.createElement('span');
+      filename.className = 'bili-dl-filename-preview-name';
+      filename.textContent = `${base}.${ext}`;
+      filename.title = filename.textContent;
+      filenamePreviewEl.replaceChildren(label, filename);
     }
 
 
@@ -2002,6 +2578,17 @@
 
     function captureDownloadJob() {
       const sel = qualities.find((q) => q.qn === selectedQn);
+      const createdAt = Date.now();
+      const label = selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel();
+      const filenameSnapshot = {
+        filenameTemplate,
+        createdAt,
+        index: 1,
+        pageIndex,
+        part: videoInfo.pages?.[pageIndex]?.page || (pageIndex + 1),
+        partTitle: videoInfo.pages?.[pageIndex]?.part || videoInfo.title,
+        qualityLabel: label
+      };
       return {
         scope: 'video',
         info: {
@@ -2009,15 +2596,19 @@
           aid: videoInfo.aid,
           cid: videoInfo.cid,
           title: videoInfo.title,
-          author: videoInfo.author || ''
+          author: videoInfo.author || '',
+          page: filenameSnapshot.part,
+          partTitle: filenameSnapshot.partTitle
         },
         qn: selectedQn,
         format: selectedFormat,
         streamPreference,
         mode: sel?.mode || 'durl',
         pageIndex,
-        label: selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel(),
-        estimatedBytes: currentEstimateBytes
+        label,
+        estimatedBytes: currentEstimateBytes,
+        ...filenameSnapshot,
+        filenameBase: buildFilenameBase(videoInfo, selectedQn, selectedFormat, filenameSnapshot)
       };
     }
 
@@ -2052,6 +2643,18 @@
       const streamSelection = streamPreference;
       const jobId = opts.jobId || null;
       const shouldCancel = () => Boolean(activeJobs.get(jobId)?.cancelRequested || (queueRunning && queueCancelled));
+      const job = jobId ? activeJobs.get(jobId) : null;
+      const filenameBase = opts.filenameBase
+        || job?.filenameBase
+        || buildFilenameBase(info, qn, format, {
+          filenameTemplate: opts.filenameTemplate || job?.filenameTemplate || filenameTemplate,
+          createdAt: opts.createdAt || job?.createdAt,
+          index: opts.index != null ? opts.index : (job?.index != null ? job.index : 1),
+          pageIndex: opts.pageIndex != null ? opts.pageIndex : job?.pageIndex,
+          part: opts.part != null ? opts.part : job?.part,
+          partTitle: opts.partTitle || job?.partTitle || info?.partTitle,
+          qualityLabel: opts.qualityLabel || job?.label
+        });
       await waitWhileQueuePaused();
       if (shouldCancel()) throw new Error('下载已取消');
 
@@ -2060,7 +2663,7 @@
           aid: info.aid,
           cid: info.cid,
           title: info.title,
-          filenameBase: buildFilenameBase(info, qn, format),
+          filenameBase,
           audioOnly: true,
           jobId
         }, 0);
@@ -2075,7 +2678,8 @@
         qn,
         streamPreference: streamSelection,
         title: info.title,
-        filenameBase: buildFilenameBase(info, qn, format),
+        filenameBase,
+        includeAudioBlob: opts.reuseAudio === true,
         jobId
       }, 0);
 
@@ -2088,6 +2692,16 @@
         throw new Error('保存数据不可用，请刷新页面后重试');
       }
       return result;
+    }
+
+    async function saveReusedAudio(result, filenameBase, shouldCancel, jobId) {
+      const audioBlob = result?.audioBlob;
+      if (!audioBlob?.size) return null;
+      const filename = `${filenameBase}.m4a`;
+      updateProgress('save', 95, 0, 0, jobId);
+      const downloadId = await downloadBlob(audioBlob, filename, shouldCancel);
+      updateProgress('save', 100, 0, 0, jobId);
+      return { audioOnly: true, reusedAudio: true, filename, downloadId };
     }
 
     function finishActiveJob(jobId) {
@@ -2128,7 +2742,15 @@
           const result = await runSingleDownload(job.info, {
             qn: job.qn,
             format: job.format,
-            jobId
+            jobId,
+            filenameBase: job.filenameBase,
+            filenameTemplate: job.filenameTemplate,
+            createdAt: job.createdAt,
+            index: job.index,
+            pageIndex: job.pageIndex,
+            part: job.part,
+            partTitle: job.partTitle,
+            qualityLabel: job.label
           });
           if (result.videoOnly) {
             setTaskState(job, TASK_STATE.completed);
@@ -2218,11 +2840,41 @@
       if (queueRunning || activeJobs.size) return;
       const isRetry = Array.isArray(retryPlan);
       if (!isRetry && (!canStartCurrentDownload() || !isMultiPartVideo(videoInfo.pages))) return;
-      const plan = isRetry ? retryPlan.map((item) => ({ ...item })) : videoInfo.pages.map((_part, index) => ({
-        href: location.href, index, qn: selectedQn, format: selectedFormat, streamPreference,
-        label: selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel(),
-        mode: qualities.find((quality) => quality.qn === selectedQn)?.mode || 'durl'
-      }));
+      const plan = isRetry ? retryPlan.map((item) => ({ ...item })) : videoInfo.pages.map((_part, index) => {
+        const createdAt = Date.now();
+        const partMeta = videoInfo.pages[index] || {};
+        const label = selectedFormat === 'm4a' ? '音频' : getSelectedQualityLabel();
+        const nameOpts = {
+          filenameTemplate,
+          createdAt,
+          index: index + 1,
+          pageIndex: index,
+          part: partMeta.page || (index + 1),
+          partTitle: partMeta.part || videoInfo.title,
+          qualityLabel: label
+        };
+        return {
+          href: location.href,
+          index,
+          qn: selectedQn,
+          format: selectedFormat,
+          streamPreference,
+          label,
+          mode: qualities.find((quality) => quality.qn === selectedQn)?.mode || 'durl',
+          filenameTemplate: nameOpts.filenameTemplate,
+          createdAt: nameOpts.createdAt,
+          batchIndex: nameOpts.index,
+          part: nameOpts.part,
+          partTitle: nameOpts.partTitle,
+          filenameBase: buildFilenameBase({
+            title: partMeta.part || videoInfo.title,
+            author: videoInfo.author,
+            bvid: videoInfo.bvid,
+            page: nameOpts.part,
+            partTitle: nameOpts.partTitle
+          }, selectedQn, selectedFormat, nameOpts)
+        };
+      });
       if (!plan.length) return;
       // Lock before the first await: double-clicks must not start duplicate queues.
       queueRunning = true;
@@ -2242,7 +2894,14 @@
           const job = createDownloadTask({
             scope: 'video', format: entry.format, qn: entry.qn, mode: entry.mode,
             pageIndex: entry.index, label: `P${entry.index + 1} · ${entry.label}`,
-            info: { title: `P${entry.index + 1}` }
+            info: { title: `P${entry.index + 1}` },
+            filenameTemplate: entry.filenameTemplate,
+            filenameBase: entry.filenameBase,
+            createdAt: entry.createdAt,
+            index: entry.batchIndex != null ? entry.batchIndex : (entry.index + 1),
+            part: entry.part,
+            partTitle: entry.partTitle,
+            qualityLabel: entry.label
           });
           activeJobs.set(job.jobId, job);
           mountJobCard(job);
@@ -2260,7 +2919,20 @@
                 job.info = result.info;
                 const title = job.cardEl?.querySelector('.bili-dl-progress-title');
                 if (title) { title.textContent = job.info.title; title.title = job.info.title; }
-                await runSingleDownload(job.info, { qn: entry.qn, format: entry.format, streamPreference: entry.streamPreference, jobId: job.jobId });
+                await runSingleDownload(job.info, {
+                  qn: entry.qn,
+                  format: entry.format,
+                  streamPreference: entry.streamPreference,
+                  jobId: job.jobId,
+                  filenameBase: entry.filenameBase || job.filenameBase,
+                  filenameTemplate: entry.filenameTemplate || job.filenameTemplate,
+                  createdAt: entry.createdAt || job.createdAt,
+                  index: entry.batchIndex != null ? entry.batchIndex : (entry.index + 1),
+                  pageIndex: entry.index,
+                  part: entry.part,
+                  partTitle: entry.partTitle || job.info?.partTitle,
+                  qualityLabel: entry.label
+                });
                 ok++;
                 setTaskState(job, TASK_STATE.completed);
                 await addHistory({ bvid: job.info.bvid, aid: job.info.aid, cid: job.info.cid,
@@ -2332,6 +3004,9 @@
       const queueQn = selectedQn;
       const queueStrategy = qualityStrategy;
       const queueStreamPreference = streamPreference;
+      const queueDownloadKind = isRetry && retryTasks[0]?.downloadKind
+        ? retryTasks[0].downloadKind
+        : listDownloadKind;
       queueRunning = true;
       operationMode = 'list';
       queueCancelled = false;
@@ -2350,39 +3025,105 @@
           if (queueCancelled) break;
           const item = items[index];
           const retryTask = isRetry ? retryTasks[index] : null;
+          const downloadKind = retryTask?.downloadKind || queueDownloadKind;
+          const wantsVideo = downloadKind !== 'audio';
+          const wantsAudio = downloadKind !== 'video';
+          const outputFormat = wantsVideo ? 'mp4' : 'm4a';
+          const contentLabel = listDownloadKindLabel(downloadKind);
           setListStatus(`正在下载 ${index + 1}/${items.length}：${item.title}`);
           const jobId = `list-${Date.now()}-${index}`;
+          const createdAt = Date.now();
+          const nameOpts = {
+            filenameTemplate,
+            createdAt,
+            index: index + 1,
+            pageIndex: 0,
+            part: 1,
+            partTitle: item.title,
+            qualityLabel: !wantsVideo
+              ? '音频'
+              : getSelectedQualityLabel()
+          };
+          const filenameBase = buildFilenameBase({
+            title: item.title,
+            author: item.author,
+            bvid: item.bvid,
+            page: 1,
+            partTitle: item.title
+          }, queueQn, outputFormat, nameOpts);
+          const audioFilenameBase = wantsAudio
+            ? buildFilenameBase({ title: item.title, author: item.author, bvid: item.bvid, page: 1, partTitle: item.title }, queueQn, 'm4a', { ...nameOpts, qualityLabel: '音频' })
+            : '';
           const job = createDownloadTask({
             jobId,
             scope: 'list',
             info: item,
-            format: 'mp4',
-            label: `列表 · ${getSelectedQualityLabel()}`
+            format: outputFormat,
+            downloadKind,
+            label: `列表 · ${contentLabel}${downloadKind === 'audio' ? '' : ` · ${getSelectedQualityLabel()}`}`,
+            filenameTemplate,
+            filenameBase,
+            audioFilenameBase,
+            createdAt,
+            index: nameOpts.index,
+            part: 1,
+            partTitle: item.title
           });
           activeJobs.set(jobId, job);
           mountJobCard(job);
           updateProgress('prepare', 0, 0, 0, jobId);
           try {
             let qn = Number(retryTask?.requestedQn) || queueQn;
-            const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid });
-            const available = qualityData.qualities || [];
-            if (!isRetry && queueStrategy === 'highest' && available.length) {
-              qn = available.reduce((highest, quality) => Number(quality.qn) > Number(highest.qn) ? quality : highest, available[0]).qn;
+            let wasDowngraded = false;
+            let actualLabel = '音频';
+            if (wantsVideo) {
+              const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid });
+              const available = qualityData.qualities || [];
+              if (!isRetry && queueStrategy === 'highest' && available.length) {
+                qn = available.reduce((highest, quality) => Number(quality.qn) > Number(highest.qn) ? quality : highest, available[0]).qn;
+              }
+              const requested = available.find((quality) => quality.qn === qn);
+              const actualQuality = requested || available.filter((quality) => Number(quality.qn) < Number(qn))
+                .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
+              qn = actualQuality?.qn;
+              if (!qn) throw new Error('该视频没有可下载的清晰度');
+              wasDowngraded = !requested;
+              job.requestedQn = qn;
+              actualLabel = actualQuality.label || `${qn}P`;
+              if (actualQuality.mode === 'dash') await setupMuxInPage();
             }
-            const requested = available.find((quality) => quality.qn === qn);
-            const actualQuality = requested || available.filter((quality) => Number(quality.qn) < Number(qn))
-              .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
-            qn = actualQuality?.qn;
-            if (!qn) throw new Error('该视频没有可下载的清晰度');
-            const wasDowngraded = !requested;
-            job.requestedQn = qn;
-            const actualLabel = actualQuality.label || `${qn}P`;
-            job.label = `列表 · ${actualLabel}${wasDowngraded ? '（降级）' : ''}`;
+            job.label = `列表 · ${contentLabel}${wantsVideo ? ` · ${actualLabel}` : ''}${wasDowngraded ? '（降级）' : ''}`;
             const labelEl = job.cardEl?.querySelector('.bili-dl-progress-q');
             if (labelEl) labelEl.textContent = job.label;
-            if (actualQuality.mode === 'dash') await setupMuxInPage();
-            const result = await runSingleDownload(item, { qn, format: 'mp4', streamPreference: queueStreamPreference, jobId });
-            if (result.videoOnly) throw new Error('只下载到无音频视频轨');
+            let videoResult = null;
+            if (wantsVideo) {
+              videoResult = await runSingleDownload(item, {
+                qn, format: 'mp4', streamPreference: queueStreamPreference, jobId,
+                filenameBase: job.filenameBase, filenameTemplate: job.filenameTemplate,
+                createdAt: job.createdAt, index: job.index, qualityLabel: actualLabel,
+                reuseAudio: downloadKind === 'both'
+              });
+              job.videoSaved = true;
+              await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: `视频 · ${actualLabel}`, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '视频已保存，历史记录写入失败：' + error.message));
+            }
+            if (wantsAudio) {
+              if (downloadKind === 'both') {
+                job.label = '列表 · 仅音频';
+                if (labelEl) labelEl.textContent = job.label;
+              }
+              const reused = downloadKind === 'both'
+                ? await saveReusedAudio(videoResult, job.audioFilenameBase, () => Boolean(activeJobs.get(jobId)?.cancelRequested || queueCancelled), jobId)
+                : null;
+              if (!reused) {
+                await runSingleDownload(item, {
+                  qn, format: 'm4a', streamPreference: queueStreamPreference, jobId,
+                  filenameBase: job.audioFilenameBase, filenameTemplate: job.filenameTemplate,
+                  createdAt: job.createdAt, index: job.index, qualityLabel: '音频'
+                });
+              }
+              job.audioSaved = true;
+              await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: '音频', format: 'm4a', ts: Date.now() }).catch((error) => debugLog('历史', '音频已保存，历史记录写入失败：' + error.message));
+            }
             ok++;
             if (wasDowngraded) downgraded++;
             selectedListBvids.delete(item.bvid);
@@ -2390,20 +3131,19 @@
               if (input.dataset.bvid === item.bvid) input.checked = false;
             });
             setTaskState(job, TASK_STATE.completed);
-            await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: actualLabel, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '文件已保存，历史记录写入失败：' + error.message));
             debugLog('列表', `完成 ${index + 1}/${items.length}：${item.title}`);
           } catch (error) {
             const problem = classifyDownloadError(error);
             if (problem.type === 'cancelled') {
               cancelled++;
-              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, message: '已取消，可重试' });
+              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: job.videoSaved ? 'audio' : downloadKind, message: '已取消，可重试' });
               setTaskState(job, TASK_STATE.cancelled);
               debugLog('列表', `已取消 ${index + 1}/${items.length}：${item.title}`);
             } else {
               fail++;
               job.error = problem;
               setTaskState(job, TASK_STATE.failed, problem.message);
-              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, title: item.title, message: problem.message });
+              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: job.videoSaved ? 'audio' : downloadKind, title: item.title, message: problem.message });
               debugLog('列表', `失败 ${index + 1}/${items.length}：${item.title} · ${problem.message}`);
             }
           } finally {
@@ -2412,7 +3152,7 @@
           }
           if (job.error?.type === 'save') {
             for (const pendingItem of items.slice(index + 1)) {
-              failedTasks.push({ item: pendingItem, requestedQn: queueQn, message: '保存异常后未开始，可重试' });
+              failedTasks.push({ item: pendingItem, requestedQn: queueQn, downloadKind: queueDownloadKind, message: '保存异常后未开始，可重试' });
             }
             setListStatus('保存异常，已停止后续下载；检查磁盘和浏览器下载记录后，可重试未完成视频。', 'error');
             processed = items.length;
@@ -2424,7 +3164,7 @@
       } finally {
         if (queueCancelled) {
           for (const pendingItem of items.slice(processed)) {
-            failedTasks.push({ item: pendingItem, requestedQn: queueQn, message: '队列取消后未开始，可重试' });
+            failedTasks.push({ item: pendingItem, requestedQn: queueQn, downloadKind: queueDownloadKind, message: '队列取消后未开始，可重试' });
           }
         }
         queueRunning = false;
@@ -2435,12 +3175,11 @@
         updateListRetryFailed();
         refreshStartBtnForParallel();
       }
-      if (queueCancelled) setListStatus(`列表下载已取消：已保存 ${ok}/${items.length} 个视频`, 'error');
+      if (queueCancelled) setListStatus(`已取消 · 已保存 ${ok}/${items.length} 个${listDownloadKindLabel(queueDownloadKind)}`, 'error');
       else if (fail || cancelled) {
-        const firstReason = failedTasks[0]?.message;
-        setListStatus(`队列已结束：成功 ${ok}，失败 ${fail}，未开始 ${Math.max(0, failedTasks.length - fail - cancelled)}，已取消 ${cancelled}${downgraded ? `，清晰度降级 ${downgraded}` : ''}${firstReason ? `；原因：${firstReason}` : ''}`, fail ? 'error' : 'success');
+        setListStatus(`已结束 · 成功 ${ok} · 失败 ${fail} · 取消 ${cancelled}${downgraded ? ` · 清晰度降级 ${downgraded}` : ''}`, fail ? 'error' : 'success');
       }
-      else setListStatus(`列表下载完成：已保存 ${ok} 个视频${downgraded ? `（${downgraded} 个清晰度降级）` : ''}`, 'success');
+      else setListStatus(`已完成 · 保存 ${ok} 个${listDownloadKindLabel(queueDownloadKind)}${downgraded ? ` · 清晰度降级 ${downgraded}` : ''}`, 'success');
       if (ok) {
         noteDownloadSuccessForRating();
       }
@@ -2501,6 +3240,9 @@
     listQueueCancelBtn.onclick = cancelEntireQueue;
     listStartBtn.onclick = startListDownload;
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);
+    listDownloadKindEl?.querySelectorAll('[data-list-download-kind]').forEach((button) => {
+      button.onclick = () => setListDownloadKind(button.dataset.listDownloadKind);
+    });
     listSelectAllBtn.onclick = () => {
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       if (allSelected) selectedListBvids.clear();
@@ -2544,11 +3286,13 @@
         saveDownloadPrefs();
       };
     });
-    filenameStyleEl.onchange = () => {
-      filenameStyle = filenameStyleEl.value;
-      refreshFilenamePreview();
-      saveDownloadPrefs();
-    };
+    if (EXT.storage?.onChanged) {
+      EXT.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        const key = globalThis.BiliDlSettings?.STORAGE_KEY || 'biliDlSettings_v1';
+        if (changes[key]?.newValue) applyFilenameSettings(globalThis.BiliDlSettings.normalizeSettings(changes[key].newValue));
+      });
+    }
     loadDownloadPrefs().catch(() => {});
 
     // FAB 可拖拽：按住按钮拖动；小位移松开仍算点击打开面板
@@ -2664,16 +3408,31 @@
       }, 100);
     });
 
-    panel.querySelector('.bili-dl-feedback')?.addEventListener('click', (e) => {
+    panel.querySelector('.bili-dl-feedback')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      const el = e.currentTarget;
-      navigator.clipboard?.writeText('hangdudu0@agent.qq.com').catch(() => {});
-      window.location.href = 'mailto:hangdudu0@agent.qq.com?subject=B站视频下载助手反馈';
+      const btn = e.currentTarget;
+      const label = btn.querySelector('.bili-dl-feedback-label');
+      const email = 'hangdudu0@agent.qq.com';
+      try {
+        await copyTextToClipboard(email);
+        if (label) {
+          const prev = label.textContent;
+          label.textContent = '已复制';
+          btn.classList.add('is-copied');
+          clearTimeout(btn._copyTimer);
+          btn._copyTimer = setTimeout(() => {
+            label.textContent = prev || '反馈';
+            btn.classList.remove('is-copied');
+          }, 1600);
+        }
+      } catch {
+        window.location.href = `mailto:${email}?subject=B站视频下载助手反馈`;
+      }
     });
 
     window.__BILI_DL_API__ = {
       fetchSnapshot,
-      openPanel: async (mode = 'video') => {
+      openPanel: async (mode = 'video', opts = {}) => {
         isOpen = true;
         openMenuShell();
         modeTabsEl.classList.toggle('hidden', !isListPage());
@@ -2681,6 +3440,7 @@
         if (mode === 'list' && isListPage()) await setDownloadMode('list');
         else setDownloadMode('video');
         await loadVideoInfo();
+        if (opts.sheet) await openInfoSheet(opts.sheet);
       }
     };
 
@@ -2769,7 +3529,7 @@
       return true;
     }
     if (msg.type === 'BILI_DL_OPEN_PANEL') {
-      api.openPanel(msg.mode)
+      api.openPanel(msg.mode, { sheet: msg.sheet })
         .then(() => sendResponse({ ok: true }))
         .catch((e) => sendResponse({ ok: false, error: e.message }));
       return true;
