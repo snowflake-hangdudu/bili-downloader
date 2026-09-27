@@ -50,7 +50,14 @@ function formatTime(ts) {
 }
 
 function isBiliDownloadUrl(url) {
-  return url && (/bilibili\.com\/video\//.test(url) || /bilibili\.com\/list\//.test(url));
+  return url && (/bilibili\.com\/video\//.test(url) || /bilibili\.com\/list\//.test(url) || isSpaceDownloadUrl(url));
+}
+
+function isSpaceDownloadUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.hostname === 'space.bilibili.com' && /^\/\d+\/?(?:upload\/video\/?)?$/.test(url.pathname);
+  } catch { return false; }
 }
 
 function formatCurrentSite(url) {
@@ -320,6 +327,26 @@ async function init() {
   }
 
   let tabId = tab.id;
+
+  if (isSpaceDownloadUrl(tab.url)) {
+    renderVideo({ info: { title: 'UP 主视频投稿', author: '', pic: '', pages: [] }, qualities: [], qualityError: 'space' });
+    $('video-sub').textContent = '读取全部投稿，选择清晰度后批量下载';
+    $('quality-tags').textContent = '全部投稿 · MP4 / M4A';
+    $('btn-open-panel').disabled = false;
+    $('btn-open-panel').textContent = '打开投稿下载面板';
+    $('btn-open-panel').onclick = async () => {
+      try {
+        const response = await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_OPEN_PANEL', mode: 'list' });
+        if (!response?.ok) throw new Error(response?.error || '页面未就绪');
+        window.close();
+      } catch {
+        $('error-text').textContent = '请重载插件并刷新 UP 主空间页面后重试';
+        showState('state-error');
+      }
+    };
+    showState('state-video');
+    return;
+  }
 
   try {
     const resp = await EXT.tabs.sendMessage(tabId, { type: 'BILI_DL_GET_INFO' });

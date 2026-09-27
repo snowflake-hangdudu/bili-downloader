@@ -1,12 +1,14 @@
 # B站视频下载助手
 
-Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页与 `/list/` 列表页下载，仅供个人学习使用。
+Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页、`/list/` 列表页及 UP 主空间视频投稿下载，仅供个人学习使用。
 
-- 版本：1.1.5
+- 版本：1.2.3（开发中）
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
 ## 功能概览
+
+- UP 主空间首页及 `/upload/video` 投稿页的“视频 / TA的视频”标题旁提供下载图标和“下载全部”入口。点击后分页读取全部公开视频投稿并全选；选择清晰度、MP4 / M4A 下载内容后，复用串行队列、暂停、取消与失败重试。下载时请保持空间页面打开。多分 P 投稿当前下载第一 P。
 
 - 固定高码率优先，隐藏视频质量偏好选项；列表及合集支持全选/取消全选当前已加载视频。
 

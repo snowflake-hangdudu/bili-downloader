@@ -8,6 +8,15 @@
   const PANEL = 'bili-dl-panel';
   const AGENT = 'bili-dl-agent';
   const VERSION = EXT.runtime.getManifest().version;
+  function isSpacePage() {
+    return location.hostname === 'space.bilibili.com' && /^\/\d+\/?(?:upload\/video\/?)?$/.test(location.pathname);
+  }
+  function chooseSpaceQuality(available, tier) {
+    // Bilibili's 112 / 116 are also 1080P (+ / 60fps); 120 starts at 4K.
+    const cap = tier === 'highest' ? Infinity : tier === '720' ? 64 : 116;
+    return available.filter((quality) => Number(quality.qn) > 0 && Number(quality.qn) <= cap)
+      .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
+  }
   // 图标资源缓存破坏：换图标后递增 ICON_REV，避免只 F5 仍显示旧图
   const ICON_REV = '27';
   const ICON_URL = EXT.runtime.getURL(`icons/icon128.png?r=${ICON_REV}`);
@@ -19,6 +28,7 @@
   const PLUGINS_JSON_URL = `${CONFIG_BASE_URL}/api/plugins`;
   const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
   const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v2';
+  const FEEDBACK_EMAIL = 'hangdudu0@agent.qq.com';
   const DOWNLOAD_PREFS_KEY = 'biliDlDownloadPrefs_v1';
   const THEME_PREF_KEY = 'biliDlTheme_v1';
   const CONTENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -590,6 +600,7 @@
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
           </div>
           <div id="bili-dl-list-body" class="bili-dl-list-body hidden">
+            <div id="bili-dl-space-profile" class="bili-dl-space-profile hidden"></div>
             <div class="bili-dl-section">
               <div class="bili-dl-section-head">清晰度</div>
               <div id="bili-dl-list-quality-pills" class="bili-dl-quality-pills">
@@ -619,6 +630,8 @@
             <div class="bili-dl-list-tools" role="search">
               <input id="bili-dl-list-search" type="search" maxlength="80" placeholder="搜索已加载视频标题" aria-label="搜索已加载视频标题">
               <div class="bili-dl-list-filter" role="group" aria-label="列表筛选">
+                <button id="bili-dl-list-refresh-page" type="button" class="bili-dl-list-refresh-page hidden" title="只读取 B 站当前页显示的投稿">刷新当前页</button>
+                <span id="bili-dl-list-filter-sep" class="bili-dl-list-filter-sep hidden" aria-hidden="true">|</span>
                 <button type="button" data-list-filter="all" class="active">全部</button>
                 <button type="button" data-list-filter="selected">已选</button>
               </div>
@@ -737,6 +750,8 @@
     const listItemsEl = panel.querySelector('#bili-dl-list-items');
     const listSearchEl = panel.querySelector('#bili-dl-list-search');
     const listFilterEl = panel.querySelector('.bili-dl-list-filter');
+    const listRefreshPageBtn = panel.querySelector('#bili-dl-list-refresh-page');
+    const listFilterSepEl = panel.querySelector('#bili-dl-list-filter-sep');
     const listSortEl = panel.querySelector('#bili-dl-list-sort');
     const listLoadMoreBtn = panel.querySelector('#bili-dl-list-load-more');
     const listStartBtn = panel.querySelector('#bili-dl-list-start');
@@ -798,6 +813,8 @@
     const infoBody = panel.querySelector('#bili-dl-info-body');
     const defaultStartBtnNodes = Array.from(startBtn.childNodes).map((node) => node.cloneNode(true));
     let listItems = [];
+    let spaceQualityTier = 'highest';
+    let listTotal = 0;
     let collectionHref = '';
     let selectedListBvids = new Set();
     let listLoaded = false;
@@ -1556,13 +1573,35 @@
         render();
         return;
       }
+      if (key === 'feedback') {
+        infoTitle.textContent = '反馈';
+        infoDate.textContent = '复制邮箱后，附上诊断报告或截图发送即可。';
+        infoDate.classList.remove('hidden');
+        clearNode(infoBody);
+        appendTextElement(infoBody, 'p', 'bili-dl-feedback-email', FEEDBACK_EMAIL);
+        const copyEmail = appendTextElement(infoBody, 'button', 'bili-dl-btn bili-dl-diagnostics-copy', '复制反馈邮箱');
+        copyEmail.type = 'button';
+        copyEmail.onclick = async () => {
+          try {
+            await copyTextToClipboard(FEEDBACK_EMAIL);
+            copyEmail.textContent = '邮箱已复制';
+          } catch {
+            copyEmail.textContent = '请手动复制上方邮箱';
+          }
+        };
+        const openDiag = appendTextElement(infoBody, 'button', 'bili-dl-btn bili-dl-btn-secondary bili-dl-diagnostics-copy', '打开诊断日志');
+        openDiag.type = 'button';
+        openDiag.onclick = () => { renderInfoSheet('diagnostics'); };
+        return;
+      }
       if (key === 'diagnostics') {
         infoTitle.textContent = '诊断日志';
         infoDate.textContent = `本页保留最近 ${debugEntries.length} / 100 条；已隐藏链接和敏感参数。`;
         infoDate.classList.remove('hidden');
         clearNode(infoBody);
+        appendTextElement(infoBody, 'p', 'bili-dl-feedback-email', `反馈邮箱：${FEEDBACK_EMAIL}`);
         const timingLines = [...activeJobs.values(), ...taskHistory].map((job) => `任务：${job.info?.title || '视频'} · ${job.state} · ${formatTaskTimings(job)}`);
-        const report = ['B站视频下载助手诊断报告', `时间：${new Date().toLocaleString('zh-CN')}`, `页面：${location.pathname}`, '', '任务阶段耗时：', ...(timingLines.length ? timingLines : ['暂无任务']), '', '日志：', ...debugEntries.map((entry) => `[${entry.time}] ${entry.step}：${entry.msg}`)].join('\n');
+        const report = ['B站视频下载助手诊断报告', `时间：${new Date().toLocaleString('zh-CN')}`, `页面：${location.pathname}`, `反馈邮箱：${FEEDBACK_EMAIL}`, '', '任务阶段耗时：', ...(timingLines.length ? timingLines : ['暂无任务']), '', '日志：', ...debugEntries.map((entry) => `[${entry.time}] ${entry.step}：${entry.msg}`)].join('\n');
         const textarea = document.createElement('textarea');
         textarea.className = 'bili-dl-diagnostics-text';
         textarea.readOnly = true;
@@ -1577,7 +1616,7 @@
             await copyTextToClipboard(report);
             copy.textContent = '已复制';
           } catch {
-            copy.textContent = '复制失败';
+            copy.textContent = '复制失败，请手动全选上方文本';
           }
         };
         infoBody.append(textarea, copy);
@@ -1608,7 +1647,7 @@
         if (menu.classList.contains('is-page')) renderInfoSheet(key);
         return;
       }
-      if (key === 'diagnostics' || key === 'tasks' || key === 'settings' || key === 'donate') return;
+      if (key === 'diagnostics' || key === 'tasks' || key === 'settings' || key === 'donate' || key === 'feedback') return;
       await loadRemoteContent();
       if (!menu.classList.contains('is-page')) return;
       renderInfoSheet(key, remoteContent[key]);
@@ -1731,7 +1770,7 @@
     }
 
     function saveDownloadPrefs() {
-      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, streamPreference, listDownloadKind } }).catch(() => {});
+      return EXT.storage.local.set({ [DOWNLOAD_PREFS_KEY]: { format: selectedFormat, qn: selectedQn, qualityStrategy, spaceQualityTier, streamPreference, listDownloadKind } }).catch(() => {});
     }
 
     function applyFilenameSettings(settings) {
@@ -1784,6 +1823,7 @@
       try {
         const data = await EXT.storage.local.get(DOWNLOAD_PREFS_KEY);
         const prefs = data[DOWNLOAD_PREFS_KEY] || {};
+        if (['highest', '1080', '720'].includes(prefs.spaceQualityTier)) spaceQualityTier = prefs.spaceQualityTier;
         if (prefs.format === 'mp4' || prefs.format === 'm4a') setFormat(prefs.format);
         if (Number(prefs.qn) > 0) selectedQn = Number(prefs.qn);
         if (prefs.qualityStrategy === 'highest' || prefs.qualityStrategy === 'exact') qualityStrategy = prefs.qualityStrategy;
@@ -1791,6 +1831,7 @@
         qualityStrategyEls.forEach((el) => { el.value = qualityStrategy; });
         streamPreferenceEls.forEach((el) => { el.value = streamPreference; });
         syncQualitySelection();
+        if (isSpacePage()) renderSpaceQuality();
         await loadFilenameSettings();
         refreshFilenamePreview();
       } catch { /* 偏好读取失败不影响下载 */ }
@@ -1809,14 +1850,178 @@
     };
 
     function isListPage() {
-      return /^\/list\//.test(location.pathname) || (collectionHref && new URL(collectionHref).pathname === location.pathname && Boolean(videoInfo?.collection?.items?.length));
+      return isSpacePage() || /^\/list\//.test(location.pathname) || (collectionHref && new URL(collectionHref).pathname === location.pathname && Boolean(videoInfo?.collection?.items?.length));
+    }
+
+    let spaceGathering = false;
+
+    function renderSpaceQuality() {
+      if (!isSpacePage() || !listQualitySection || !listPillsEl) return;
+      listQualitySection.querySelector('.bili-dl-section-head').textContent = '清晰度策略';
+      listQualitySection.querySelector('.bili-dl-quality-strategy-row').classList.add('hidden');
+      clearNode(listPillsEl);
+      for (const [value, label] of [['highest', '最高可用'], ['1080', '最高 1080P'], ['720', '最高 720P']]) {
+        const button = appendTextElement(listPillsEl, 'button', `bili-dl-pill${value === spaceQualityTier ? ' active' : ''}`, label);
+        button.type = 'button';
+        button.setAttribute('aria-pressed', String(value === spaceQualityTier));
+        button.title = value === 'highest' ? '每个视频下载当前账号可获取的最高画质' : `在 ${value}P 及以下选择最高可用画质`;
+        button.onclick = () => {
+          spaceQualityTier = value;
+          renderSpaceQuality();
+          saveDownloadPrefs();
+        };
+      }
+    }
+
+    function readSpaceDomMeta() {
+      const pickText = (...selectors) => {
+        for (const selector of selectors) {
+          const text = document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+          if (text) return text;
+        }
+        return '';
+      };
+      const readStat = (label) => {
+        for (const item of document.querySelectorAll('.nav-statistics .nav-item, .n-statistics .n-data, .counter-item, .h-statistics li, .upinfo__detail__stat')) {
+          const text = item.textContent.replace(/\s+/g, ' ').trim();
+          if (!text.includes(label)) continue;
+          const num = item.querySelector('.item-num, .num, .n-num, .counter, .upinfo__detail__stat-count')?.textContent?.replace(/\s+/g, ' ').trim();
+          if (num) return num;
+          return text.replace(new RegExp(`\\s*${label}.*$`), '').trim() || text;
+        }
+        const fallback = { 粉丝: '.h-fans', 关注: '.h-following', 获赞: '.h-liked' }[label];
+        if (!fallback) return '';
+        const text = document.querySelector(fallback)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        return text.replace(label, '').trim();
+      };
+      return {
+        name: pickText('.nickname', '.h-name', '.space-name', '.upinfo__name'),
+        fans: readStat('粉丝'),
+        following: readStat('关注'),
+        likes: readStat('获赞')
+      };
+    }
+
+    function readSpaceAvatarUrl() {
+      const scopes = [
+        '.upinfo__avatar img',
+        '.h-avatar img',
+        '.space-upinfo .avatar img',
+        '.header-upinfo .avatar img',
+        '.space-header .header-avatar-wrap img',
+        '.space-header .avatar img'
+      ];
+      for (const selector of scopes) {
+        const img = document.querySelector(selector);
+        if (img?.src) return normalizeCoverUrl(img.src);
+      }
+      const header = document.querySelector('.space-upinfo, .h-header, .space-header, .header-info');
+      const img = header?.querySelector('img');
+      return img?.src ? normalizeCoverUrl(img.src) : '';
+    }
+
+    let cachedSpaceDomPage = 1;
+
+    function readSpaceDomPageNumber() {
+      const active = document.querySelector(
+        '.vui_pagenation .vui_pager-item.is-active, .vui_pager .is-active, .be-pager-item-active, .pagination .current, button[aria-current="page"], .pagenation .current'
+      );
+      const n = Number(String(active?.textContent || active?.getAttribute('aria-label') || '').replace(/\D/g, ''));
+      if (Number.isFinite(n) && n > 0) {
+        cachedSpaceDomPage = n;
+        return n;
+      }
+      return cachedSpaceDomPage;
+    }
+
+    function mutationTouchesExtension(mutations) {
+      const panelRoot = document.getElementById('bili-dl-panel-root');
+      if (!panelRoot) return false;
+      return mutations.every((mutation) => {
+        const node = mutation.target.nodeType === Node.TEXT_NODE ? mutation.target.parentElement : mutation.target;
+        return node instanceof Node && panelRoot.contains(node);
+      });
+    }
+
+    function scrapeSpaceVisibleVideos() {
+      const roots = [
+        document.querySelector('#video-list'),
+        document.querySelector('.video-list'),
+        document.querySelector('.list-content'),
+        document.querySelector('.section-gap')
+      ].filter(Boolean);
+      const root = roots[0] || document.body;
+      const author = readSpaceDomMeta().name || listItems[0]?.author || '';
+      const seen = new Set();
+      const items = [];
+      for (const link of root.querySelectorAll('a[href*="/video/BV"], a[href*="/video/bv"]')) {
+        if (link.closest('.space-upinfo, .h-header, .space-header, nav, header, .bili-dl-panel')) continue;
+        const match = /\/video\/(BV[\w]+)/i.exec(link.href);
+        if (!match) continue;
+        const bvid = match[1].toUpperCase();
+        if (seen.has(bvid)) continue;
+        seen.add(bvid);
+        const card = link.closest('.small-item, .bili-video-card, .upload-video-card, .video-list .item, .list-item');
+        const titleNode = card?.querySelector('.title, .bili-video-card__info--tit, .name, [title]');
+        const title = titleNode?.getAttribute('title')?.trim()
+          || titleNode?.textContent?.replace(/\s+/g, ' ').trim()
+          || link.getAttribute('title')?.trim()
+          || bvid;
+        items.push({
+          bvid,
+          aid: '',
+          cid: '',
+          title,
+          author,
+          cover: card?.querySelector('img')?.src || '',
+          views: '',
+          pubtime: 0,
+          duration: 0
+        });
+      }
+      return items;
+    }
+
+    function syncSpaceListTools() {
+      const onSpace = isSpacePage();
+      listRefreshPageBtn?.classList.toggle('hidden', !onSpace);
+      listFilterSepEl?.classList.toggle('hidden', !onSpace);
+    }
+
+    function renderSpaceProfile() {
+      const profile = panel.querySelector('#bili-dl-space-profile');
+      if (!profile) return;
+      if (!isSpacePage()) {
+        profile.classList.add('hidden');
+        clearNode(profile);
+        return;
+      }
+      const dom = readSpaceDomMeta();
+      const name = dom.name || listItems[0]?.author || 'UP 主';
+      const avatarUrl = readSpaceAvatarUrl();
+      clearNode(profile);
+      profile.classList.remove('hidden');
+      if (avatarUrl) {
+        const image = document.createElement('img');
+        image.src = avatarUrl;
+        image.alt = '';
+        image.onerror = () => image.remove();
+        profile.appendChild(image);
+      }
+      const copy = appendTextElement(profile, 'div', 'bili-dl-space-profile-copy', '');
+      appendTextElement(copy, 'strong', '', name);
+      const meta = appendTextElement(copy, 'div', 'bili-dl-space-profile-meta', '');
+      if (dom.fans) appendTextElement(meta, 'span', '', `${dom.fans} 粉丝`);
+      if (dom.following) appendTextElement(meta, 'span', '', `${dom.following} 关注`);
+      if (dom.likes) appendTextElement(meta, 'span', '', `${dom.likes} 获赞`);
+      appendTextElement(meta, 'span', '', listLoaded ? `${listTotal} 个投稿` : '正在读取投稿…');
     }
 
     function setListStatus(text, type = '') {
       listStatusEl.textContent = text;
       listStatusEl.title = text;
       listStatusEl.dataset.type = type;
-      const progressText = /^正在下载\s+\d+\/\d+/.test(String(text || ''));
+      const progressText = !queueCancelled && /^正在下载\s+\d+\/\d+/.test(String(text || ''));
       if (progressText && operationMode === 'list') {
         const card = listJobListEl?.querySelector('.bili-dl-job-card:last-child .bili-dl-progress-sub');
         if (card) {
@@ -1854,7 +2059,7 @@
 
     function updateListSelection() {
       const count = selectedListBvids.size;
-      listStartBtn.disabled = !count || queueRunning;
+      listStartBtn.disabled = !count || queueRunning || spaceGathering;
       listStartBtn.textContent = count ? `下载已选 ${count} 个${listDownloadKindLabel()}` : `下载已选${listDownloadKindLabel()}`;
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       listSelectAllBtn.textContent = allSelected ? '取消全选' : '全选';
@@ -1865,10 +2070,10 @@
     function updateListLoadMore() {
       const visible = listHasMore || listLoading;
       listLoadMoreBtn.classList.toggle('hidden', !visible);
-      listLoadMoreBtn.disabled = listLoading || !listHasMore;
+      listLoadMoreBtn.disabled = listLoading || spaceGathering || !listHasMore;
       listLoadMoreBtn.textContent = listLoading
         ? '正在加载…'
-        : `继续加载（已加载 ${listItems.length} 个）`;
+        : `${isSpacePage() ? '读取全部投稿' : '继续加载'}（已加载 ${listItems.length} 个）`;
     }
 
     function updateListRetryFailed() {
@@ -1939,6 +2144,81 @@
       return fresh.length;
     }
 
+    function mergeSpacePageItems(apiItems, scrapedItems) {
+      if (!scrapedItems.length) return apiItems;
+      const apiByBvid = new Map((apiItems || []).filter((item) => item?.bvid).map((item) => [String(item.bvid).toUpperCase(), item]));
+      return scrapedItems.map((item) => {
+        const api = apiByBvid.get(String(item.bvid).toUpperCase());
+        return api ? { ...api, title: item.title || api.title, cover: item.cover || api.cover } : item;
+      });
+    }
+
+    async function ensureListItemVideoIds(item) {
+      if (item?.aid && item?.cid) return item;
+      const resolved = await agentCall('RESOLVE_VIDEO', { href: `https://www.bilibili.com/video/${item.bvid}`, pageIndex: 0 });
+      item.aid = String(resolved.info.aid || item.aid || '');
+      item.cid = String(resolved.info.cid || item.cid || '');
+      if (!item.aid || !item.cid) throw new Error('无法读取该投稿的视频信息');
+      return item;
+    }
+
+    async function applySpaceListData(data, { pn, pageOnly = false, statusPrefix = '' } = {}) {
+      listItems = Array.isArray(data.items) ? data.items : [];
+      listTotal = Number(data.total) || 0;
+      selectedListBvids = new Set(listItems.filter((item) => selectedListBvids.has(item.bvid)).map((item) => item.bvid));
+      listCursor = pageOnly ? null : (data.cursor || null);
+      listHasMore = pageOnly ? true : !!data.hasMore;
+      const author = readSpaceDomMeta().name || listItems[0]?.author || 'UP 主';
+      listTitleEl.textContent = pageOnly ? `${author} · 第 ${pn} 页` : (data.title || `${author}的全部投稿`);
+      listTitleEl.title = listTitleEl.textContent;
+      listCountEl.textContent = pageOnly
+        ? `当前页 ${listItems.length}${listTotal ? ` / 共 ${listTotal}` : ''} 个`
+        : `已加载 ${listItems.length}${listTotal ? ` / 共 ${listTotal}` : ''} 个`;
+      listLoaded = true;
+      renderListItems();
+      renderSpaceProfile();
+      const prefix = statusPrefix || (pageOnly ? `已同步第 ${pn} 页 ${listItems.length} 个投稿` : '');
+      setListStatus(prefix || (listItems.length ? '可勾选投稿，或点击“读取全部投稿”加载并全选。' : '未读取到视频，请刷新页面后重试。'));
+    }
+
+    async function refreshSpaceCurrentPage(fromWatcher = false) {
+      if (!isSpacePage() || listLoading || queueRunning || spaceGathering) return;
+      const requestedHref = location.href;
+      const pn = readSpaceDomPageNumber();
+      listLoading = true;
+      listRefreshPageBtn.disabled = true;
+      updateListLoadMore();
+      setListStatus(fromWatcher ? `已切换到第 ${pn} 页，正在同步…` : `正在读取第 ${pn} 页投稿…`);
+      try {
+        const scraped = scrapeSpaceVisibleVideos();
+        const data = await agentCall('RESOLVE_LIST', { cursor: { pn } });
+        if (requestedHref !== location.href) return;
+        const items = mergeSpacePageItems(data.items, scraped);
+        await applySpaceListData({ ...data, items }, {
+          pn,
+          pageOnly: true,
+          statusPrefix: `已同步第 ${pn} 页 ${items.length} 个投稿，勾选后开始下载。`
+        });
+      } catch (error) {
+        if (requestedHref !== location.href) return;
+        const scraped = scrapeSpaceVisibleVideos();
+        if (scraped.length) {
+          await applySpaceListData({ items: scraped, total: listTotal, space: true }, {
+            pn,
+            pageOnly: true,
+            statusPrefix: `已从当前页读取 ${scraped.length} 个投稿。`
+          });
+        } else {
+          setListStatus(`读取失败：${error.message || error}`, 'error');
+        }
+      } finally {
+        listLoading = false;
+        listRefreshPageBtn.disabled = false;
+        updateListLoadMore();
+        updateListSelection();
+      }
+    }
+
     async function loadListItems(force = false) {
       if (listLoading) return;
       if (listLoaded && !force) return;
@@ -1947,18 +2227,30 @@
       updateListLoadMore();
       setListStatus(force ? '正在刷新列表…' : '正在读取视频列表…');
       try {
-        const data = await agentCall('RESOLVE_LIST', {});
+        const spacePn = isSpacePage() ? readSpaceDomPageNumber() : 0;
+        const scraped = isSpacePage() ? scrapeSpaceVisibleVideos() : [];
+        const data = await agentCall('RESOLVE_LIST', spacePn ? { cursor: { pn: spacePn } } : {});
         if (requestedHref !== location.href) return;
-        listItems = Array.isArray(data.items) ? data.items : [];
-        selectedListBvids = new Set(listItems.filter((item) => selectedListBvids.has(item.bvid)).map((item) => item.bvid));
-        listCursor = data.cursor || null;
-        listHasMore = !!data.hasMore;
-        listTitleEl.textContent = data.title || '视频列表';
-        listTitleEl.title = data.title || '视频列表';
-        listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
-        listLoaded = true;
-        renderListItems();
-        setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '滚动 B 站页面加载更多视频后，重新进入“列表下载”即可更新。') : '未读取到视频，请刷新页面后重试。');
+        if (data.space) {
+          const items = mergeSpacePageItems(data.items, scraped);
+          await applySpaceListData({ ...data, items }, {
+            pn: spacePn,
+            pageOnly: true,
+            statusPrefix: items.length ? `已读取第 ${spacePn} 页 ${items.length} 个投稿，可勾选下载或点“读取全部投稿”。` : ''
+          });
+        } else {
+          listItems = Array.isArray(data.items) ? data.items : [];
+          listTotal = Number(data.total) || 0;
+          selectedListBvids = new Set(listItems.filter((item) => selectedListBvids.has(item.bvid)).map((item) => item.bvid));
+          listCursor = data.cursor || null;
+          listHasMore = !!data.hasMore;
+          listTitleEl.textContent = data.title || '视频列表';
+          listTitleEl.title = data.title || '视频列表';
+          listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
+          listLoaded = true;
+          renderListItems();
+          setListStatus(listItems.length ? (data.collection ? '勾选合集视频后将自动依次下载；下载期间请保持页面打开。' : '滚动 B 站页面加载更多视频后，重新进入“列表下载”即可更新。') : '未读取到视频，请刷新页面后重试。');
+        }
         debugLog('列表', `已读取 ${listItems.length} 个视频`);
       } catch (error) {
         if (requestedHref !== location.href) return;
@@ -1973,21 +2265,27 @@
 
     async function loadMoreListItems() {
       if (listLoading || !listHasMore) return;
+      const requestedHref = location.href;
       listLoading = true;
       updateListLoadMore();
       setListStatus(`正在加载更多视频（当前 ${listItems.length} 个）…`);
       try {
         const data = await agentCall('LOAD_LIST_PAGE', { cursor: listCursor });
+        if (requestedHref !== location.href) return false;
         const added = mergeListItems(data.items);
+        listTotal = Number(data.total) || listTotal;
+        if (data.hasMore && !added) throw new Error('分页未返回新视频，请稍后重试');
         listCursor = data.cursor || listCursor;
         listHasMore = !!data.hasMore && added > 0;
         listCountEl.textContent = `已加载 ${listItems.length}${data.total ? ` / 共 ${data.total}` : ''} 个`;
         renderListItems();
         setListStatus(added ? `已加载 ${added} 个视频，可继续选择。` : '没有更多可加载的视频。');
         debugLog('列表', `分页加载 ${added} 个，累计 ${listItems.length} 个`);
+        return true;
       } catch (error) {
         setListStatus(`继续加载失败：${error.message || error}`, 'error');
         debugLog('列表', `分页加载失败：${error.message || error}`);
+        return false;
       } finally {
         listLoading = false;
         updateListLoadMore();
@@ -1995,6 +2293,7 @@
     }
 
     async function setDownloadMode(mode) {
+      if (isSpacePage()) mode = 'list';
       activeMode = mode;
       videoBodyEl.classList.toggle('hidden', mode === 'list');
       listBodyEl.classList.toggle('hidden', mode !== 'list');
@@ -2002,6 +2301,7 @@
       if (mode === 'list') {
         estimateRequestId += 1;
         syncQualitySelection();
+        if (isSpacePage()) renderSpaceQuality();
       } else {
         syncQualitySelection();
         refreshEstimate();
@@ -2220,10 +2520,11 @@
 
     function syncJobListVisibility() {
       downloading = activeJobs.size > 0 || queueRunning;
-      listBodyEl?.classList.toggle('is-queue-running', queueRunning && operationMode === 'list');
+      const listQueueLayout = queueRunning && operationMode === 'list' && !queueCancelled;
+      listBodyEl?.classList.toggle('is-queue-running', listQueueLayout);
       Object.entries(taskUi).forEach(([scope, ui]) => {
         const hasJobs = Array.from(activeJobs.values()).some((job) => jobScope(job) === scope);
-        const showQueueControls = queueRunning && operationMode === scope;
+        const showQueueControls = queueRunning && !queueCancelled && operationMode === scope;
         ui.jobList.classList.toggle('hidden', !hasJobs);
         ui.queueActions.classList.toggle('hidden', !showQueueControls);
         ui.jobPanel?.classList.toggle('hidden', !(hasJobs || showQueueControls));
@@ -2285,6 +2586,8 @@
         queueCancel.disabled = true;
         queueCancel.textContent = '正在取消…';
       });
+      if (operationMode === 'list') setListStatus('正在取消队列…');
+      syncJobListVisibility();
     }
 
     function resetQueueCancelButton() {
@@ -2409,7 +2712,7 @@
     updateProgress = (step, percent, received, total, jobId, meta = {}) => {
       const job = jobId ? activeJobs.get(jobId) : null;
       const el = job?.cardEl;
-      if (!el) return;
+      if (!el || job.cancelRequested || queueCancelled) return;
       setTaskState(job, taskStateForStep(step));
 
       const phaseEl = el.querySelector('.bili-dl-job-phase');
@@ -2524,6 +2827,10 @@
     }
 
     function renderQualityPills(list) {
+      if (isSpacePage()) {
+        renderSpaceQuality();
+        return;
+      }
       qualities = list || [];
       [pillsEl, listPillsEl].forEach(clearNode);
       if (!qualities.length) {
@@ -2598,6 +2905,16 @@
     }
 
     async function loadVideoInfo() {
+      if (isSpacePage()) {
+        modeTabsEl.classList.add('hidden');
+        menu.classList.add('is-list-page');
+        renderSpaceProfile();
+        renderSpaceQuality();
+        if (activeMode !== 'list') await setDownloadMode('list');
+        else if (!listLoaded) await loadListItems();
+        return;
+      }
+      panel.querySelector('#bili-dl-space-profile')?.classList.add('hidden');
       const requestedHref = location.href;
       setDetect('识别页面中…', false);
       setVideoLoading(true);
@@ -3208,13 +3525,14 @@
       const items = isRetry
         ? retryTasks.map((entry) => entry.item).filter(Boolean)
         : listItems.filter((item) => selectedListBvids.has(item.bvid));
-      if (!items.length || queueRunning) return;
+      if (!items.length || queueRunning || spaceGathering) return;
       if (activeJobs.size > 0) {
         setListStatus('请先等待当前下载完成，再开始列表下载。', 'error');
         return;
       }
       const queueQn = selectedQn;
       const queueStrategy = qualityStrategy;
+      const queueSpaceTier = isSpacePage() ? spaceQualityTier : null;
       const queueStreamPreference = streamPreference;
       const queueDownloadKind = isRetry && retryTasks[0]?.downloadKind
         ? retryTasks[0].downloadKind
@@ -3286,20 +3604,28 @@
           updateProgress('prepare', 0, 0, 0, jobId);
           try {
             let qn = Number(retryTask?.requestedQn) || queueQn;
+            if (queueCancelled) throw new Error('下载已取消');
+            await ensureListItemVideoIds(item);
+            if (queueCancelled) throw new Error('下载已取消');
+            job.info.aid = item.aid;
+            job.info.cid = item.cid;
             let wasDowngraded = false;
             let actualLabel = '音频';
             if (wantsVideo) {
+              if (queueCancelled) throw new Error('下载已取消');
               const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid });
+              if (queueCancelled) throw new Error('下载已取消');
               const available = qualityData.qualities || [];
               if (!isRetry && queueStrategy === 'highest' && available.length) {
                 qn = available.reduce((highest, quality) => Number(quality.qn) > Number(highest.qn) ? quality : highest, available[0]).qn;
               }
               const requested = available.find((quality) => quality.qn === qn);
-              const actualQuality = requested || available.filter((quality) => Number(quality.qn) < Number(qn))
-                .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
+              const actualQuality = queueSpaceTier && !isRetry ? chooseSpaceQuality(available, queueSpaceTier)
+                : requested || available.filter((quality) => Number(quality.qn) < Number(qn))
+                  .sort((a, b) => Number(b.qn) - Number(a.qn))[0];
               qn = actualQuality?.qn;
               if (!qn) throw new Error('该视频没有可下载的清晰度');
-              wasDowngraded = !requested;
+              wasDowngraded = !queueSpaceTier && !requested;
               job.requestedQn = qn;
               actualLabel = actualQuality.label || `${qn}P`;
               if (actualQuality.mode === 'dash') await setupMuxInPage();
@@ -3397,6 +3723,13 @@
       }
     }
 
+    function syncSpaceDownloadAllVisibility() {
+      const button = document.getElementById('bili-dl-space-download-all');
+      if (!button || !isSpacePage()) return;
+      if (isOpen) button.setAttribute('hidden', '');
+      else button.removeAttribute('hidden');
+    }
+
     function openMenuShell() {
       menu.classList.remove('hidden');
       menu.classList.remove('is-entering');
@@ -3405,6 +3738,7 @@
       toggleBtn.title = '收起下载助手';
       toggleBtn.setAttribute('aria-label', '收起下载助手');
       toggleBtn.setAttribute('aria-expanded', 'true');
+      syncSpaceDownloadAllVisibility();
     }
 
     function closeMenuShell() {
@@ -3413,6 +3747,7 @@
       toggleBtn.title = '打开下载助手';
       toggleBtn.setAttribute('aria-label', '打开下载助手');
       toggleBtn.setAttribute('aria-expanded', 'false');
+      syncSpaceDownloadAllVisibility();
     }
     toggleBtn.onclick = async () => {
       if (toggleDragged) return; // 拖拽后不触发点击
@@ -3451,6 +3786,8 @@
     listQueuePauseBtn.onclick = toggleEntireQueuePause;
     listQueueCancelBtn.onclick = cancelEntireQueue;
     listStartBtn.onclick = startListDownload;
+    listRefreshPageBtn.onclick = () => refreshSpaceCurrentPage(false);
+    listLoadMoreBtn.onclick = () => isSpacePage() ? prepareAllSpaceUploads(listLoadMoreBtn) : loadMoreListItems();
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);
     listDownloadKindEl?.querySelectorAll('[data-list-download-kind]').forEach((button) => {
       button.onclick = () => setListDownloadKind(button.dataset.listDownloadKind);
@@ -3626,22 +3963,23 @@
       e.preventDefault();
       const btn = e.currentTarget;
       const label = btn.querySelector('.bili-dl-feedback-label');
-      const email = 'hangdudu0@agent.qq.com';
+      let copied = false;
       try {
-        await copyTextToClipboard(email);
-        if (label) {
-          const prev = label.textContent;
-          label.textContent = '已复制';
-          btn.classList.add('is-copied');
-          clearTimeout(btn._copyTimer);
-          btn._copyTimer = setTimeout(() => {
-            label.textContent = prev || '反馈';
-            btn.classList.remove('is-copied');
-          }, 1600);
-        }
-      } catch {
-        window.location.href = `mailto:${email}?subject=B站视频下载助手反馈`;
+        await copyTextToClipboard(FEEDBACK_EMAIL);
+        copied = true;
+      } catch { /* 复制失败时改开诊断页，便于手动反馈 */ }
+      if (copied && label) {
+        const prev = label.textContent;
+        label.textContent = '已复制';
+        btn.classList.add('is-copied');
+        clearTimeout(btn._copyTimer);
+        btn._copyTimer = setTimeout(() => {
+          label.textContent = prev || '反馈';
+          btn.classList.remove('is-copied');
+        }, 1600);
+        return;
       }
+      openInfoSheet('feedback').catch(() => {});
     });
 
     window.__BILI_DL_API__ = {
@@ -3658,6 +3996,90 @@
       }
     };
 
+    async function prepareAllSpaceUploads(button) {
+      if (spaceGathering || queueRunning || listLoading) return;
+      const href = location.href;
+      spaceGathering = true;
+      button.disabled = true;
+      listLoaded = false;
+      updateListSelection();
+      try {
+        await window.__BILI_DL_API__.openPanel('list');
+        if (!listLoaded || href !== location.href) return;
+        while (listHasMore && href === location.href) {
+          if (!await loadMoreListItems()) return;
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+        if (href !== location.href) return;
+        if (listItems.length !== listTotal) {
+          setListStatus(`已读取 ${listItems.length} / ${listTotal} 个投稿，数量有变化，请重新读取后确认。`, 'error');
+          return;
+        }
+        selectedListBvids = new Set(listItems.map((item) => item.bvid));
+        renderListItems();
+        setListStatus(`已读取并选中全部 ${listItems.length} 个投稿，选择清晰度和下载内容后开始下载。`);
+      } catch (error) {
+        setListStatus(`读取全部投稿失败：${error.message || error}`, 'error');
+      } finally {
+        spaceGathering = false;
+        button.disabled = false;
+        updateListSelection();
+        updateListLoadMore();
+      }
+    }
+
+    // Space is a SPA: reattach the entry when the native video heading is replaced.
+    function mountSpaceEntry() {
+      if (!isSpacePage()) {
+        document.getElementById('bili-dl-space-download-all')?.setAttribute('hidden', '');
+        return;
+      }
+      if (document.getElementById('bili-dl-space-download-all')) {
+        syncSpaceDownloadAllVisibility();
+        return;
+      }
+      const heading = [...document.querySelectorAll('h1,h2,h3,.section-title,.part-title,.video-title,.upload-title,.video-header .title')]
+        .find((node) => /^(?:TA的视频|TA 的视频|我的视频|视频)(?:\s*[·\-]?\s*\d+)?$/.test(node.textContent.trim()));
+      if (!heading) return;
+      const button = document.createElement('button');
+      button.id = 'bili-dl-space-download-all';
+      button.type = 'button';
+      button.title = '读取该 UP 主的全部视频投稿并打开批量下载面板';
+      button.setAttribute('aria-label', '下载该 UP 主的全部视频投稿');
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4');
+      icon.appendChild(path);
+      button.append(icon, document.createTextNode('下载全部'));
+      button.onclick = () => prepareAllSpaceUploads(button);
+      heading.appendChild(button);
+      syncSpaceDownloadAllVisibility();
+    }
+    if (location.hostname === 'space.bilibili.com') {
+      let entryTimer;
+      let pageWatchTimer;
+      let lastSpaceDomPage = readSpaceDomPageNumber();
+      new MutationObserver((mutations) => {
+        clearTimeout(entryTimer);
+        entryTimer = setTimeout(mountSpaceEntry, 200);
+        if (mutationTouchesExtension(mutations)) return;
+        clearTimeout(pageWatchTimer);
+        pageWatchTimer = setTimeout(() => {
+          if (!isSpacePage()) return;
+          if (queueRunning || downloading || spaceGathering || listLoading) return;
+          const pn = readSpaceDomPageNumber();
+          if (pn === lastSpaceDomPage) return;
+          lastSpaceDomPage = pn;
+          if (isOpen && activeMode === 'list' && listLoaded) {
+            refreshSpaceCurrentPage(true);
+          }
+        }, 250);
+      }).observe(document.body, { childList: true, subtree: true });
+      mountSpaceEntry();
+    }
+
     let lastUrl = location.href;
 
     function onUrlChanged() {
@@ -3670,6 +4092,8 @@
       listLoaded = false;
       listItems = [];
       selectedListBvids = new Set();
+      cachedSpaceDomPage = readSpaceDomPageNumber();
+      syncSpaceListTools();
       modeTabsEl.classList.toggle('hidden', !isListPage());
       menu.classList.toggle('is-list-page', isListPage());
       if (isListPage() && activeMode === 'list') setDownloadMode('list');

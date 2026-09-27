@@ -1237,6 +1237,86 @@
   margin-left: 4px;
 }
 
+#bili-dl-space-download-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  padding: 5px 9px;
+  border: 1px solid #00a1d6;
+  border-radius: 6px;
+  background: #eaf7ff;
+  color: #008cc9;
+  font: 500 12px/18px system-ui, sans-serif;
+  vertical-align: middle;
+  cursor: pointer;
+}
+#bili-dl-space-download-all[hidden] { display: none; }
+#bili-dl-space-download-all:disabled { opacity: .6; cursor: wait; }
+#bili-dl-space-download-all:hover { background: #d8f1ff; }
+#bili-dl-space-download-all:focus-visible { outline: 2px solid #00a1d6; outline-offset: 2px; }
+#bili-dl-space-download-all svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.bili-dl-space-profile {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  background: var(--bdl-surface-soft, #f6f8fb);
+  border: 1px solid var(--bdl-border, #eef0f3);
+  border-radius: 10px;
+}
+
+.bili-dl-space-profile img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.bili-dl-space-profile-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.bili-dl-space-profile-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.bili-dl-space-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--bdl-muted, #6b7280);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bili-dl-list-filter-sep {
+  color: var(--bdl-text-muted, #9aa0a6);
+  font-size: 11px;
+  user-select: none;
+}
+
+.bili-dl-list-refresh-page {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bdl-accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.bili-dl-list-refresh-page:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
 .bili-dl-footer {
   display: flex;
   /* 固定高度面板的剩余空间留在内容与导航之间。 */
@@ -1527,10 +1607,20 @@
   margin-top: 0;
 }
 
-/* 面向普通下载流程隐藏高级诊断与会话任务入口。 */
-.bili-dl-footer-links [data-sheet="diagnostics"],
-.bili-dl-footer-links [data-sheet="tasks"] {
+/* 诊断日志仅保留代码入口，底栏不对普通用户展示。 */
+.bili-dl-footer-links [data-sheet="diagnostics"] {
   display: none !important;
+}
+
+.bili-dl-feedback-email {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 8px;
+  background: var(--bdl-surface-soft, #f6f8fb);
+  color: var(--bdl-text);
+  font: 600 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  word-break: break-all;
 }
 
 .bili-dl-diagnostics-text {

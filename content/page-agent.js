@@ -312,7 +312,8 @@
         });
         if (!res.ok) throw new Error('接口请求失败 HTTP ' + res.status);
         const json = await res.json();
-        if (json.code !== 0) throw new Error((json.message || '接口错误') + ' (API code=' + json.code + ')');
+        const guestWbiKeys = apiPath === '/x/web-interface/nav' && json.code === -101 && json.data?.wbi_img;
+        if (json.code !== 0 && !guestWbiKeys) throw new Error((json.message || '接口错误') + ' (API code=' + json.code + ')');
         return json.data;
       })(), controller, 20000);
     } finally { controller.abort(); }
@@ -446,7 +447,72 @@
     return '/x/v2/medialist/resource/list?' + query.toString();
   }
 
+  // WBI uses MD5 over the sorted query plus the daily mixin key.
+  function spaceMd5(value) {
+    const bytes = new TextEncoder().encode(value);
+    const size = Math.ceil((bytes.length + 9) / 64) * 64;
+    const buffer = new Uint8Array(size);
+    buffer.set(bytes);
+    buffer[bytes.length] = 128;
+    const view = new DataView(buffer.buffer);
+    view.setUint32(size - 8, bytes.length * 8, true);
+    view.setUint32(size - 4, Math.floor(bytes.length / 536870912), true);
+    const shifts = [[7, 12, 17, 22], [5, 9, 14, 20], [4, 11, 16, 23], [6, 10, 15, 21]];
+    let state = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+    for (let offset = 0; offset < size; offset += 64) {
+      let [a, b, c, d] = state;
+      for (let i = 0; i < 64; i++) {
+        const round = Math.floor(i / 16);
+        const f = round === 0 ? (b & c) | (~b & d) : round === 1 ? (d & b) | (~d & c) : round === 2 ? b ^ c ^ d : c ^ (b | ~d);
+        const index = round === 0 ? i : round === 1 ? (5 * i + 1) % 16 : round === 2 ? (3 * i + 5) % 16 : (7 * i) % 16;
+        const sum = (a + f + Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) + view.getUint32(offset + index * 4, true)) | 0;
+        const shift = shifts[round][i % 4];
+        [a, b, c, d] = [d, (b + ((sum << shift) | (sum >>> (32 - shift)))) | 0, b, c];
+      }
+      state = state.map((word, index) => (word + [a, b, c, d][index]) | 0);
+    }
+    return state.map((word) => [0, 8, 16, 24].map((shift) => ((word >>> shift) & 255).toString(16).padStart(2, '0')).join('')).join('');
+  }
+
+  let spaceWbiKey = '';
+  async function loadSpacePage(cursor) {
+    const mid = location.hostname === 'space.bilibili.com' && /^\/(\d+)(?:\/|$)/.exec(location.pathname)?.[1];
+    if (!mid) throw new Error('当前页面不是 UP 主空间');
+    if (cursor?.mid && cursor.mid !== mid) throw new Error('UP 主已切换，请重新读取投稿');
+    if (!spaceWbiKey) {
+      const nav = await apiGet('/x/web-interface/nav');
+      const img = nav.wbi_img;
+      const raw = [img?.img_url, img?.sub_url].map((url) => String(url || '').split('/').pop().split('.')[0]).join('');
+      if (raw.length !== 64) throw new Error('无法读取投稿接口签名，请刷新页面后重试');
+      spaceWbiKey = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52].map((index) => raw[index]).join('').slice(0, 32);
+    }
+    const pn = Math.max(1, Number(cursor?.pn) || 1);
+    const params = { mid, pn, ps: 30, order: 'pubdate', tid: 0, keyword: '', platform: 'web', web_location: '333.1387', wts: Math.floor(Date.now() / 1000) };
+    const query = Object.keys(params).sort().map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(String(params[key]).replace(/[!'()*]/g, ''))}`).join('&');
+    let data;
+    try {
+      data = await apiGet('/x/space/wbi/arc/search?' + query + '&w_rid=' + spaceMd5(query + spaceWbiKey));
+    } catch (error) {
+      spaceWbiKey = '';
+      throw error;
+    }
+    const rawItems = data.list?.vlist;
+    if (!Array.isArray(rawItems) || !data.page) throw new Error('投稿列表返回格式异常，请稍后重试');
+    const items = rawItems.filter((item) => item.bvid && item.aid).map((item) => ({
+      bvid: String(item.bvid), aid: String(item.aid), cid: '', title: String(item.title || '未命名视频'),
+      author: String(item.author || ''), cover: String(item.pic || ''), views: String(item.play || ''),
+      pubtime: Number(item.created || 0), duration: String(item.length || '').split(':').reduce((seconds, part) => seconds * 60 + (Number(part) || 0), 0)
+    }));
+    if (items.length !== rawItems.length) throw new Error('部分投稿缺少视频标识，请稍后重试');
+    const total = Number(data.page.count);
+    if (!Number.isFinite(total) || total < 0) throw new Error('无法读取投稿总数，请稍后重试');
+    const hasMore = pn * 30 < total;
+    if (hasMore && !items.length) throw new Error('投稿分页返回空数据，请稍后重试');
+    return { title: `${items[0]?.author || 'UP 主'}的全部投稿`, total, items, hasMore, cursor: { mid, pn: pn + 1 }, space: true };
+  }
+
   async function loadListPage(cursor) {
+    if (location.hostname === 'space.bilibili.com') return loadSpacePage(cursor);
     const context = getListContext();
     const data = await apiGet(listApiPath(context, cursor || context.cursor));
     const rawItems = Array.isArray(data.media_list) ? data.media_list : [];
@@ -463,7 +529,8 @@
     };
   }
 
-  async function resolveList() {
+  async function resolveList(cursor) {
+    if (location.hostname === 'space.bilibili.com') return loadSpacePage(cursor || null);
     if (/^\/video\//.test(location.pathname)) {
       const info = await resolveVideo(location.href, 0);
       if (!info.collection) throw new Error('当前视频未提供可下载的合集条目');
@@ -1341,7 +1408,7 @@
           reply(id, { type: 'OK', data: { info: await resolveVideo(e.data.href, e.data.pageIndex || 0) } });
           break;
         case 'RESOLVE_LIST':
-          reply(id, { type: 'OK', data: await resolveList() });
+          reply(id, { type: 'OK', data: await resolveList(e.data?.cursor || null) });
           break;
         case 'LOAD_LIST_PAGE':
           reply(id, { type: 'OK', data: await loadListPage(e.data.cursor) });
