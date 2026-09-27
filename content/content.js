@@ -20,9 +20,11 @@
   const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
   const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v2';
   const DOWNLOAD_PREFS_KEY = 'biliDlDownloadPrefs_v1';
+  const THEME_PREF_KEY = 'biliDlTheme_v1';
   const CONTENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-  // @pack:remote-catalog-debug-refresh -- release packers replace true with false.
+  // @pack:remote-debug-refresh -- release packers replace true with false.
   const REMOTE_CATALOG_DEBUG_REFRESH = true;
+  const REMOTE_CONTENT_DEBUG_REFRESH = true;
   const DEFAULT_REMOTE_CONTENT = {
     notice: { enabled: true, title: '公告', updated: '', body: '暂未获取到最新公告，请稍后再试。\n\n下载功能不受影响。' },
     coop: { enabled: true, title: '开发合作', updated: '', body: '接浏览器插件定制开发。\n\n有合作意向请联系 QQ：748604487\n邮箱：hangdudu0@agent.qq.com\n请备注「插件开发」，并简单说明需求。' },
@@ -263,8 +265,10 @@
     // Firefox keeps page Blob URLs scoped to the page principal. Let the page
     // initiate this local save instead of asking the extension background to
     // re-open the Blob URL with a different principal.
-    const isFirefox = typeof browser !== 'undefined'
-      && typeof browser.runtime?.getBrowserInfo === 'function';
+    // Content scripts cannot access runtime.getBrowserInfo() in Firefox.
+    // The Firefox packer adds browser_specific_settings.gecko to its manifest,
+    // and runtime.getManifest() is available in content scripts on both targets.
+    const isFirefox = Boolean(EXT.runtime.getManifest()?.browser_specific_settings?.gecko);
     if (isFirefox) {
       const link = document.createElement('a');
       link.href = url;
@@ -576,11 +580,13 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
               <span id="bili-dl-queue-label">队列下载全部分 P</span>
             </button>
-            <div id="bili-dl-queue-actions" class="bili-dl-queue-actions hidden">
-              <button id="bili-dl-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue">暂停全部</button>
-              <button id="bili-dl-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue bili-dl-btn-danger">取消整队</button>
+            <div id="bili-dl-video-job-panel" class="bili-dl-job-panel hidden">
+              <div id="bili-dl-job-list" class="bili-dl-job-list"></div>
+              <div id="bili-dl-queue-actions" class="bili-dl-job-panel-queue hidden">
+                <button id="bili-dl-queue-pause" type="button" class="bili-dl-action-btn">暂停全部</button>
+                <button id="bili-dl-queue-cancel" type="button" class="bili-dl-action-btn danger">取消整队</button>
+              </div>
             </div>
-            <div id="bili-dl-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-status" class="bili-dl-status hidden"></div>
           </div>
           <div id="bili-dl-list-body" class="bili-dl-list-body hidden">
@@ -629,11 +635,13 @@
             <div id="bili-dl-list-items" class="bili-dl-list-items"></div>
             <button id="bili-dl-list-load-more" type="button" class="bili-dl-btn bili-dl-btn-secondary hidden">继续加载</button>
             <button id="bili-dl-list-start" type="button" class="bili-dl-btn" disabled>下载已选视频</button>
-            <div id="bili-dl-list-queue-actions" class="bili-dl-queue-actions hidden">
-              <button id="bili-dl-list-queue-pause" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue">暂停全部</button>
-              <button id="bili-dl-list-queue-cancel" type="button" class="bili-dl-btn bili-dl-btn-secondary bili-dl-btn-queue bili-dl-btn-danger">取消整队</button>
+            <div id="bili-dl-list-job-panel" class="bili-dl-job-panel hidden">
+              <div id="bili-dl-list-job-list" class="bili-dl-job-list"></div>
+              <div id="bili-dl-list-queue-actions" class="bili-dl-job-panel-queue hidden">
+                <button id="bili-dl-list-queue-pause" type="button" class="bili-dl-action-btn">暂停全部</button>
+                <button id="bili-dl-list-queue-cancel" type="button" class="bili-dl-action-btn danger">取消整队</button>
+              </div>
             </div>
-            <div id="bili-dl-list-job-list" class="bili-dl-job-list hidden"></div>
             <div id="bili-dl-list-result" class="bili-dl-list-result hidden">
               <p id="bili-dl-list-status" class="bili-dl-list-status" aria-live="polite"></p>
               <button id="bili-dl-list-retry-failed" type="button" class="bili-dl-list-retry hidden">重试未完成</button>
@@ -671,6 +679,10 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 <span class="bili-dl-feedback-label">反馈</span>
               </button>
+              <button type="button" class="bili-dl-footer-action" data-sheet="donate" title="自愿赞赏">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                赞赏
+              </button>
             </div>
           </div>
           </div>
@@ -684,6 +696,33 @@
       </div>
     `));
     document.body.appendChild(panel);
+
+    const themedPanel = panel.querySelector('#bili-dl-panel');
+    document.addEventListener('pointerdown', (event) => {
+      const themeControl = panel.querySelector('.bili-dl-settings-theme-control');
+      if (!themeControl || themeControl.contains(event.target)) return;
+      const themeOptions = themeControl.querySelector('.bili-dl-settings-theme-options');
+      const themeTrigger = themeControl.querySelector('.bili-dl-settings-theme-trigger');
+      themeOptions?.classList.add('hidden');
+      themeTrigger?.setAttribute('aria-expanded', 'false');
+    });
+    function applyTheme(value) {
+      const theme = ['tokyo-love', 'manchester-sea', 'chinese-odyssey'].includes(value) ? value : 'bilibili';
+      themedPanel.dataset.theme = theme;
+      const themeControl = panel.querySelector('.bili-dl-settings-theme-control');
+      if (themeControl) {
+        const selectedOption = themeControl.querySelector(`[data-theme-option="${theme}"]`);
+        const currentLabel = themeControl.querySelector('.bili-dl-settings-theme-current-label');
+        const currentSwatch = themeControl.querySelector('.bili-dl-settings-theme-current-swatch');
+        if (selectedOption && currentLabel && currentSwatch) {
+          currentLabel.textContent = selectedOption.dataset.label;
+          currentSwatch.dataset.theme = theme;
+        }
+        themeControl.querySelectorAll('[data-theme-option]').forEach((option) => {
+          option.setAttribute('aria-selected', String(option.dataset.themeOption === theme));
+        });
+      }
+    }
 
     const toggleBtn = panel.querySelector('#bili-dl-toggle');
     const menu = panel.querySelector('#bili-dl-menu');
@@ -704,6 +743,7 @@
     const listPillsEl = panel.querySelector('#bili-dl-list-quality-pills');
     const listQualitySection = listPillsEl?.closest('.bili-dl-section');
     const listDownloadKindEl = panel.querySelector('#bili-dl-list-download-kind');
+    const listJobPanelEl = panel.querySelector('#bili-dl-list-job-panel');
     const listQueuePauseBtn = panel.querySelector('#bili-dl-list-queue-pause');
     const listQueueCancelBtn = panel.querySelector('#bili-dl-list-queue-cancel');
     const listQueueActionsEl = panel.querySelector('#bili-dl-list-queue-actions');
@@ -746,6 +786,7 @@
     const queueCancelBtn = panel.querySelector('#bili-dl-queue-cancel');
     const queueActionsEl = panel.querySelector('#bili-dl-queue-actions');
     const queueLabelEl = panel.querySelector('#bili-dl-queue-label');
+    const videoJobPanelEl = panel.querySelector('#bili-dl-video-job-panel');
     const jobListEl = panel.querySelector('#bili-dl-job-list');
     const statusEl = panel.querySelector('#bili-dl-status');
     const storeRatingEl = panel.querySelector('#bili-dl-store-rating');
@@ -825,12 +866,53 @@
     const toLines = (value) => Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : String(value || '').split(/\n+/).map((item) => item.trim()).filter(Boolean);
     function fillPlainBody(el, text) { clearNode(el); toLines(text).forEach((line) => appendTextElement(el, 'p', '', line)); }
     function appendNoticeSection(el, title, value) { const lines = toLines(value); if (!lines.length) return; const section = document.createElement('section'); section.className = 'bili-dl-notice-section'; appendTextElement(section, 'h4', 'bili-dl-notice-section-title', title); const list = document.createElement('ul'); list.className = 'bili-dl-notice-list'; lines.forEach((line) => appendTextElement(list, 'li', '', line)); section.appendChild(list); el.appendChild(section); }
-    function fillNoticeBody(el, notice) { clearNode(el); const roadmap = notice?.roadmap && typeof notice.roadmap === 'object' ? notice.roadmap : {}; const structured = ['pinned', 'recent', 'knownIssues'].some((key) => toLines(notice?.[key]).length) || ['feedback', 'upcoming', 'planned'].some((key) => toLines(roadmap[key]).length); if (!structured) { fillPlainBody(el, notice?.body || '暂无新公告'); return; } appendNoticeSection(el, '置顶说明', notice.pinned); appendNoticeSection(el, '最近更新', notice.recent); appendNoticeSection(el, '已知问题', notice.knownIssues); const plans = [['征集中', roadmap.feedback], ['即将更新', roadmap.upcoming], ['计划中', roadmap.planned]]; if (plans.some(([, value]) => toLines(value).length)) { const section = document.createElement('section'); section.className = 'bili-dl-notice-section'; appendTextElement(section, 'h4', 'bili-dl-notice-section-title', '开发计划'); plans.forEach(([label, value]) => { const lines = toLines(value); if (!lines.length) return; const group = document.createElement('div'); group.className = 'bili-dl-notice-plan'; appendTextElement(group, 'strong', 'bili-dl-notice-plan-label', label); const list = document.createElement('ul'); list.className = 'bili-dl-notice-list'; lines.forEach((line) => appendTextElement(list, 'li', '', line)); group.appendChild(list); section.appendChild(group); }); el.appendChild(section); } }
+    function appendCoopSection(el, coop) {
+      if (coop?.enabled === false) return;
+      const lines = toLines(coop?.body);
+      if (!lines.length) return;
+      const section = document.createElement('section');
+      section.className = 'bili-dl-notice-section bili-dl-notice-coop';
+      const title = String(coop?.title || '开发合作').trim() || '开发合作';
+      appendTextElement(section, 'h4', 'bili-dl-notice-section-title', title);
+      lines.forEach((line) => appendTextElement(section, 'p', 'bili-dl-notice-coop-line', line));
+      el.appendChild(section);
+    }
+    function fillNoticeBody(el, notice, coop) {
+      clearNode(el);
+      const roadmap = notice?.roadmap && typeof notice.roadmap === 'object' ? notice.roadmap : {};
+      const structured = ['pinned', 'recent', 'knownIssues'].some((key) => toLines(notice?.[key]).length) || ['feedback', 'upcoming', 'planned'].some((key) => toLines(roadmap[key]).length);
+      if (!structured) fillPlainBody(el, notice?.body || '暂无新公告');
+      else {
+        appendNoticeSection(el, '置顶说明', notice.pinned);
+        appendNoticeSection(el, '最近更新', notice.recent);
+        appendNoticeSection(el, '已知问题', notice.knownIssues);
+        const plans = [['征集中', roadmap.feedback], ['即将更新', roadmap.upcoming], ['计划中', roadmap.planned]];
+        if (plans.some(([, value]) => toLines(value).length)) {
+          const section = document.createElement('section');
+          section.className = 'bili-dl-notice-section';
+          appendTextElement(section, 'h4', 'bili-dl-notice-section-title', '开发计划');
+          plans.forEach(([label, value]) => {
+            const lines = toLines(value);
+            if (!lines.length) return;
+            const group = document.createElement('div');
+            group.className = 'bili-dl-notice-plan';
+            appendTextElement(group, 'strong', 'bili-dl-notice-plan-label', label);
+            const list = document.createElement('ul');
+            list.className = 'bili-dl-notice-list';
+            lines.forEach((line) => appendTextElement(list, 'li', '', line));
+            group.appendChild(list);
+            section.appendChild(group);
+          });
+          el.appendChild(section);
+        }
+      }
+      appendCoopSection(el, coop);
+    }
     function mergeRemoteContent(data) { return { notice: { ...DEFAULT_REMOTE_CONTENT.notice, ...(data.notice || {}) }, coop: { ...DEFAULT_REMOTE_CONTENT.coop, ...(data.coop || {}) }, rating: { ...DEFAULT_REMOTE_CONTENT.rating, ...(data.rating || {}) } }; }
     function detectBrowserStore() {
       const ua = navigator.userAgent || '';
-      if (/\bFirefox\b/i.test(ua)) return 'firefox';
-      if (/\bEdg\b/i.test(ua)) return 'edge';
+      if (EXT.runtime.getManifest()?.browser_specific_settings?.gecko || /\bFirefox\//i.test(ua)) return 'firefox';
+      if (/\bEdg(?:A|iOS)?\//i.test(ua)) return 'edge';
       return 'chrome';
     }
     function httpsUrl(value) {
@@ -844,17 +926,7 @@
     }
     function pluginStoreUrl(plugin) {
       const directUrl = httpsUrl(plugin?.stores?.[detectBrowserStore()]);
-      if (directUrl) return { url: directUrl, label: '前往安装' };
-      const name = String(plugin?.name || '').trim();
-      if (!name) return null;
-      const encodedName = encodeURIComponent(name);
-      const browser = detectBrowserStore();
-      const searchUrls = {
-        edge: `https://microsoftedge.microsoft.com/addons/search/${encodedName}`,
-        chrome: `https://chromewebstore.google.com/search/${encodedName}`,
-        firefox: `https://addons.mozilla.org/firefox/search/?q=${encodedName}`
-      };
-      return { url: searchUrls[browser] || searchUrls.edge, label: '前往安装' };
+      return directUrl ? { url: directUrl, label: '前往安装' } : null;
     }
     function pluginIconUrl(plugin) {
       try {
@@ -937,7 +1009,7 @@
           iconUrl: String(plugin.iconUrl || ''),
           stores: plugin.stores && typeof plugin.stores === 'object' ? plugin.stores : {}
         }))
-        .filter((plugin) => plugin.id);
+        .filter((plugin) => plugin.id && pluginStoreUrl(plugin));
     }
 
     function applyPluginCatalog(data) {
@@ -1008,13 +1080,14 @@
       try {
         const stored = await EXT.storage.local.get(CONTENT_CACHE_KEY);
         cached = getCachedRemoteContent(stored[CONTENT_CACHE_KEY]);
-        if (cached?.fetchedAt && Date.now() - cached.fetchedAt < CONTENT_CACHE_TTL_MS) {
+        if (!REMOTE_CONTENT_DEBUG_REFRESH && cached?.fetchedAt && Date.now() - cached.fetchedAt < CONTENT_CACHE_TTL_MS) {
           remoteContent = mergeRemoteContent(cached.data);
           debugLog('配置', `已使用 12 小时缓存（缓存 ${formatCacheAge(cached.fetchedAt)}），未请求接口`);
           applyRemoteButtons();
           return remoteContent;
         }
-        if (cached) debugLog('配置', cached.fetchedAt ? '12 小时缓存已过期，准备请求接口' : '旧版缓存无时间信息，准备请求接口');
+        if (REMOTE_CONTENT_DEBUG_REFRESH) debugLog('配置', '调试模式：忽略本地缓存并立即刷新公告/合作配置');
+        else if (cached) debugLog('配置', cached.fetchedAt ? '12 小时缓存已过期，准备请求接口' : '旧版缓存无时间信息，准备请求接口');
         else debugLog('配置', '无本地缓存，准备请求接口');
       } catch (error) {
         debugLog('配置', `读取本地缓存失败，准备请求接口：${error?.message || error}`);
@@ -1050,19 +1123,6 @@
       }
       return remoteContentLoadPromise;
     }
-    function unlockMenuHeight() {
-      menu.style.removeProperty('--bili-dl-sheet-min');
-      menu.style.height = '';
-      menu.style.minHeight = '';
-    }
-    function rememberSheetMinHeight() {
-      // 固定一次高度：子项 flex:1 1 0% 才能出现内部滚动；不要反复改 height
-      const h = Math.round(menu.getBoundingClientRect().height);
-      if (h > 0) {
-        menu.style.setProperty('--bili-dl-sheet-min', h + 'px');
-        menu.style.height = h + 'px';
-      }
-    }
     function fillSettingsSheet(el) {
       const Filename = globalThis.BiliDlFilename;
       const Settings = globalThis.BiliDlSettings;
@@ -1074,6 +1134,94 @@
 
       const root = document.createElement('div');
       root.className = 'bili-dl-settings';
+
+      const themeRow = document.createElement('div');
+      themeRow.className = 'bili-dl-settings-row';
+      appendTextElement(themeRow, 'span', '', '主题色');
+      const themeControl = document.createElement('div');
+      themeControl.className = 'bili-dl-settings-theme-control';
+      const themeTrigger = document.createElement('button');
+      themeTrigger.type = 'button';
+      themeTrigger.className = 'bili-dl-settings-theme-trigger';
+      themeTrigger.setAttribute('aria-label', '主题色');
+      themeTrigger.setAttribute('aria-haspopup', 'listbox');
+      themeTrigger.setAttribute('aria-expanded', 'false');
+      const currentSwatch = document.createElement('span');
+      currentSwatch.className = 'bili-dl-settings-theme-swatch bili-dl-settings-theme-current-swatch';
+      currentSwatch.setAttribute('aria-hidden', 'true');
+      const currentLabel = document.createElement('span');
+      currentLabel.className = 'bili-dl-settings-theme-current-label';
+      const chevron = document.createElement('span');
+      chevron.className = 'bili-dl-settings-theme-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      themeTrigger.append(currentSwatch, currentLabel, chevron);
+      const themeOptions = document.createElement('div');
+      themeOptions.className = 'bili-dl-settings-theme-options hidden';
+      themeOptions.id = 'bili-dl-settings-theme-options';
+      themeOptions.setAttribute('role', 'listbox');
+      themeTrigger.setAttribute('aria-controls', themeOptions.id);
+      const themeEntries = [['bilibili', '默认'], ['tokyo-love', '东爱主题'], ['manchester-sea', '海边的曼彻斯特'], ['chinese-odyssey', '大话西游']];
+      themeEntries.forEach(([value, label]) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'bili-dl-settings-theme-option';
+        option.dataset.themeOption = value;
+        option.dataset.label = label;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', String(themedPanel.dataset.theme === value));
+        const swatch = document.createElement('span');
+        swatch.className = 'bili-dl-settings-theme-swatch';
+        swatch.dataset.theme = value;
+        swatch.setAttribute('aria-hidden', 'true');
+        const optionLabel = document.createElement('span');
+        optionLabel.textContent = label;
+        option.append(swatch, optionLabel);
+        option.onclick = async () => {
+          const previous = themedPanel.dataset.theme;
+          applyTheme(value);
+          themeOptions.classList.add('hidden');
+          themeTrigger.setAttribute('aria-expanded', 'false');
+          try {
+            await EXT.storage.local.set({ [THEME_PREF_KEY]: value });
+            status.textContent = '主题已保存';
+          } catch (error) {
+            applyTheme(previous);
+            status.textContent = error?.message || '主题保存失败';
+          }
+        };
+        themeOptions.appendChild(option);
+      });
+      themeTrigger.onclick = () => {
+        const isOpen = !themeOptions.classList.contains('hidden');
+        themeOptions.classList.toggle('hidden', isOpen);
+        themeTrigger.setAttribute('aria-expanded', String(!isOpen));
+      };
+      themeTrigger.onkeydown = (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          themeOptions.classList.remove('hidden');
+          themeTrigger.setAttribute('aria-expanded', 'true');
+          const selected = themeOptions.querySelector('[aria-selected="true"]');
+          (selected || themeOptions.firstElementChild)?.focus();
+        }
+      };
+      themeOptions.onkeydown = (event) => {
+        const options = [...themeOptions.querySelectorAll('[data-theme-option]')];
+        const index = options.indexOf(event.target.closest('[data-theme-option]'));
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          themeOptions.classList.add('hidden');
+          themeTrigger.setAttribute('aria-expanded', 'false');
+          themeTrigger.focus();
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          const direction = event.key === 'ArrowDown' ? 1 : -1;
+          options[(index + direction + options.length) % options.length]?.focus();
+        }
+      };
+      themeControl.append(themeTrigger, themeOptions);
+      themeRow.appendChild(themeControl);
+      root.appendChild(themeRow);
 
       const presetRow = document.createElement('label');
       presetRow.className = 'bili-dl-settings-row';
@@ -1147,10 +1295,11 @@
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
       resetBtn.className = 'bili-dl-settings-reset';
-      resetBtn.textContent = '恢复默认';
+      resetBtn.textContent = '恢复默认文件名';
       foot.append(status, resetBtn);
       root.appendChild(foot);
       el.appendChild(root);
+      applyTheme(themedPanel.dataset.theme);
 
       let saveTimer = 0;
 
@@ -1274,6 +1423,56 @@
 
     function renderInfoSheet(key, item) {
       pageEl?.classList.toggle('is-plugins', key === 'plugins');
+      pageEl?.classList.toggle('is-donate', key === 'donate');
+      if (key === 'donate') {
+        infoTitle.textContent = '感谢您的支持与赞赏';
+        infoDate.textContent = '';
+        infoDate.classList.add('hidden');
+        clearNode(infoBody);
+
+        const donation = document.createElement('section');
+        donation.className = 'bili-dl-donate';
+        appendTextElement(donation, 'p', 'bili-dl-donate-intro', '您的支持将用于持续维护适配、改进下载体验。赞赏完全自愿，下载功能始终免费。');
+
+        const methods = document.createElement('div');
+        methods.className = 'bili-dl-donate-methods';
+        methods.setAttribute('aria-label', '选择赞赏方式');
+        const code = document.createElement('div');
+        code.className = 'bili-dl-donate-code';
+        const image = document.createElement('img');
+        const buttons = [];
+        const options = [
+          { id: 'wechat', label: '微信赞赏', file: 'assets/donate-wechat.jpg' },
+          { id: 'alipay', label: '支付宝', file: 'assets/donate-alipay.jpg' }
+        ];
+        const selectMethod = (option) => {
+          const url = EXT.runtime.getURL(option.file);
+          code.dataset.method = option.id;
+          image.src = url;
+          image.alt = `${option.label}二维码`;
+          buttons.forEach((button) => {
+            const active = button.dataset.method === option.id;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', String(active));
+          });
+        };
+        options.forEach((option) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'bili-dl-donate-method';
+          button.dataset.method = option.id;
+          button.setAttribute('aria-pressed', 'false');
+          button.textContent = option.label;
+          button.addEventListener('click', () => selectMethod(option));
+          buttons.push(button);
+          methods.appendChild(button);
+        });
+        code.appendChild(image);
+        donation.append(methods, code);
+        infoBody.appendChild(donation);
+        selectMethod(options[0]);
+        return;
+      }
       if (key === 'settings') {
         infoTitle.textContent = '设置';
         infoDate.textContent = '已入队任务不受影响';
@@ -1290,6 +1489,7 @@
         list.className = 'bili-dl-plugins-list';
         relatedPlugins.forEach((item) => {
           const storeTarget = pluginStoreUrl(item);
+          if (!storeTarget) return;
           const row = document.createElement('a');
           row.className = 'bili-dl-plugin-row';
           row.href = storeTarget.url;
@@ -1335,7 +1535,7 @@
           list.appendChild(row);
         });
         if (relatedPlugins.length) infoBody.appendChild(list);
-        else appendTextElement(infoBody, 'p', 'bili-dl-plugins-note', pluginCatalogLoaded ? '当前没有可展示的相关插件。' : '正在读取相关插件目录…');
+        else appendTextElement(infoBody, 'p', 'bili-dl-plugins-note', pluginCatalogLoaded ? '当前浏览器暂无可安装的相关插件。' : '正在读取相关插件目录…');
         return;
       }
       if (key === 'tasks') {
@@ -1387,20 +1587,17 @@
       infoTitle.textContent = data.title || (key === 'coop' ? '开发合作' : '公告');
       infoDate.textContent = data.updated ? '更新：' + data.updated : '';
       infoDate.classList.toggle('hidden', !data.updated);
-      if (key === 'notice') fillNoticeBody(infoBody, data);
+      if (key === 'notice') fillNoticeBody(infoBody, data, remoteContent.coop);
       else fillPlainBody(infoBody, data.body);
     }
     function showHome() {
       pageEl?.classList.add('hidden');
-      pageEl?.classList.remove('is-plugins');
+      pageEl?.classList.remove('is-plugins', 'is-donate');
       homeEl?.classList.remove('hidden');
       menu.classList.remove('is-page');
-      unlockMenuHeight();
     }
     async function openInfoSheet(key) {
-      // 记住当前高度作 min-height，不锁死 height，长文在页面内滚动，避免裁切与上下抖
       menu.classList.remove('is-entering');
-      rememberSheetMinHeight();
       renderInfoSheet(key, remoteContent[key]);
       homeEl?.classList.add('hidden');
       pageEl?.classList.remove('hidden');
@@ -1411,7 +1608,7 @@
         if (menu.classList.contains('is-page')) renderInfoSheet(key);
         return;
       }
-      if (key === 'diagnostics' || key === 'tasks' || key === 'settings') return;
+      if (key === 'diagnostics' || key === 'tasks' || key === 'settings' || key === 'donate') return;
       await loadRemoteContent();
       if (!menu.classList.contains('is-page')) return;
       renderInfoSheet(key, remoteContent[key]);
@@ -1964,8 +2161,8 @@
       cancelled: 'cancelled'
     });
     const taskUi = {
-      video: { jobList: jobListEl, queuePause: queuePauseBtn, queueCancel: queueCancelBtn, queueActions: queueActionsEl, body: videoBodyEl },
-      list: { jobList: listJobListEl, queuePause: listQueuePauseBtn, queueCancel: listQueueCancelBtn, queueActions: listQueueActionsEl, body: listBodyEl }
+      video: { jobList: jobListEl, jobPanel: videoJobPanelEl, queuePause: queuePauseBtn, queueCancel: queueCancelBtn, queueActions: queueActionsEl, body: videoBodyEl },
+      list: { jobList: listJobListEl, jobPanel: listJobPanelEl, queuePause: listQueuePauseBtn, queueCancel: listQueueCancelBtn, queueActions: listQueueActionsEl, body: listBodyEl }
     };
 
     function getTaskUi(scope) {
@@ -2026,9 +2223,10 @@
       listBodyEl?.classList.toggle('is-queue-running', queueRunning && operationMode === 'list');
       Object.entries(taskUi).forEach(([scope, ui]) => {
         const hasJobs = Array.from(activeJobs.values()).some((job) => jobScope(job) === scope);
-        ui.jobList.classList.toggle('hidden', !hasJobs);
         const showQueueControls = queueRunning && operationMode === scope;
+        ui.jobList.classList.toggle('hidden', !hasJobs);
         ui.queueActions.classList.toggle('hidden', !showQueueControls);
+        ui.jobPanel?.classList.toggle('hidden', !(hasJobs || showQueueControls));
         ui.queuePause.textContent = queuePaused ? '继续全部' : '暂停全部';
       });
     }
@@ -2376,17 +2574,27 @@
         return snapshotCache;
       }
       const res = await agentCall('RESOLVE_VIDEO', { href: location.href, pageIndex });
-      const qRes = await agentCall('GET_QUALITIES', { aid: res.info.aid, cid: res.info.cid });
+      let qRes = { qualities: [], maxLabel: '', loginHint: null };
+      let qualityError = '';
+      try {
+        qRes = await agentCall('GET_QUALITIES', { aid: res.info.aid, cid: res.info.cid });
+      } catch (error) {
+        qualityError = error?.message || String(error);
+      }
       if (key !== snapshotKey()) throw new Error('视频已切换，请稍后重试');
-      snapshotCache = {
+      const snapshot = {
         info: res.info,
         qualities: qRes.qualities || [],
         maxLabel: qRes.maxLabel || '',
-        loginHint: qRes.loginHint || null
+        loginHint: qRes.loginHint || null,
+        qualityError
       };
-      snapshotCacheAt = now;
-      snapshotCacheKey = key;
-      return snapshotCache;
+      if (!qualityError) {
+        snapshotCache = snapshot;
+        snapshotCacheAt = now;
+        snapshotCacheKey = key;
+      }
+      return snapshot;
     }
 
     async function loadVideoInfo() {
@@ -2487,6 +2695,10 @@
           if (qualitySection) qualitySection.classList.remove('hidden');
         }
         renderQualityPills(snap.qualities);
+        if (snap.qualityError) {
+          showErrorWithFaq('清晰度读取失败：' + snap.qualityError, 'download-fail');
+          debugLog('清晰度', snap.qualityError);
+        }
         if (snap.qualities.some((q) => q.mode === 'dash')) {
           setupMuxInPage().catch(() => {});
         }
@@ -3289,10 +3501,12 @@
     if (EXT.storage?.onChanged) {
       EXT.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
+        if (changes[THEME_PREF_KEY]) applyTheme(changes[THEME_PREF_KEY].newValue);
         const key = globalThis.BiliDlSettings?.STORAGE_KEY || 'biliDlSettings_v1';
         if (changes[key]?.newValue) applyFilenameSettings(globalThis.BiliDlSettings.normalizeSettings(changes[key].newValue));
       });
     }
+    EXT.storage.local.get(THEME_PREF_KEY).then((data) => applyTheme(data[THEME_PREF_KEY])).catch(() => {});
     loadDownloadPrefs().catch(() => {});
 
     // FAB 可拖拽：按住按钮拖动；小位移松开仍算点击打开面板

@@ -135,7 +135,10 @@ function saveHarness(results) {
   const calls = [], revoked = [], blobs = [];
   const c = vm.createContext({ URL: { createObjectURL: (blob) => { blobs.push(blob); return 'blob:test'; }, revokeObjectURL: (u) => revoked.push(u) },
     setTimeout: (fn) => setTimeout(fn, 0),
-    EXT: { runtime: { sendMessage: async (msg) => { calls.push(msg); return results.shift(); } } } });
+    EXT: { runtime: {
+      getManifest: () => ({ manifest_version: 3 }),
+      sendMessage: async (msg) => { calls.push(msg); return results.shift(); }
+    } } });
   vm.runInContext(content.slice(content.indexOf('  async function downloadBlob'), content.indexOf('  function formatView')), c);
   return { save: c.downloadBlob, calls, revoked, blobs };
 }
@@ -157,15 +160,24 @@ test('native save waits for complete, then releases Blob URL', async () => {
   assert.equal(h.calls.length, 3);
   assert.equal(h.revoked.length, 1);
 });
-test('Firefox saves the page Blob directly instead of handing it to the background', async () => {
+test('Firefox manifest marker saves the page Blob directly instead of handing it to the background', async () => {
   const calls = [], revoked = [];
   const link = { style: {}, click: () => calls.push('click'), remove: () => calls.push('remove') };
   const c = vm.createContext({
-    browser: { runtime: { getBrowserInfo: () => Promise.resolve({ name: 'Firefox' }) } },
+    browser: { runtime: { getManifest: () => ({
+      manifest_version: 3,
+      browser_specific_settings: { gecko: { id: 'bilibili-downloader@hangdudu.local' } }
+    }) } },
     document: { createElement: () => link, documentElement: { appendChild: () => calls.push('append') } },
     URL: { createObjectURL: () => 'blob:page', revokeObjectURL: (url) => revoked.push(url) },
     setTimeout: (fn) => { fn(); return 1; },
-    EXT: { runtime: { sendMessage: async () => { throw new Error('Firefox must not call background save'); } } }
+    EXT: { runtime: {
+      getManifest: () => ({
+        manifest_version: 3,
+        browser_specific_settings: { gecko: { id: 'bilibili-downloader@hangdudu.local' } }
+      }),
+      sendMessage: async () => { throw new Error('Firefox must not call background save'); }
+    } }
   });
   vm.runInContext(content.slice(content.indexOf('  async function downloadBlob'), content.indexOf('  function formatView')), c);
   assert.equal(await c.downloadBlob(new Blob(['a']), 'a.mp4'), null);

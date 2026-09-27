@@ -9,7 +9,7 @@
   const PANEL = 'bili-dl-panel';
   const AGENT = 'bili-dl-agent';
 
-  const REFERER = 'https://www.bilibili.com/';
+  const API_REFERRER = location.origin + '/';
   // 常用镜像节点
   const MIRRORS = [
     'upos-sz-mirrorali.bilivideo.com',
@@ -305,7 +305,10 @@
     try {
       return await withStallTimeout((async () => {
         const res = await fetch('https://api.bilibili.com' + apiPath, {
-          credentials: 'include', headers: { Referer: REFERER }, signal: controller.signal
+          credentials: 'include',
+          referrer: API_REFERRER,
+          referrerPolicy: 'strict-origin-when-cross-origin',
+          signal: controller.signal
         });
         if (!res.ok) throw new Error('接口请求失败 HTTP ' + res.status);
         const json = await res.json();
@@ -320,8 +323,18 @@
     if (!id) throw new Error('无法识别视频 URL');
 
     let data;
-    if (id.kind === 'bvid') data = await apiGet('/x/web-interface/view?bvid=' + id.value);
-    else data = await apiGet('/x/web-interface/view?aid=' + id.value);
+    try {
+      if (id.kind === 'bvid') data = await apiGet('/x/web-interface/view?bvid=' + id.value);
+      else data = await apiGet('/x/web-interface/view?aid=' + id.value);
+    } catch (error) {
+      const pageData = window.__INITIAL_STATE__?.videoData;
+      const matches = id.kind === 'bvid'
+        ? String(pageData?.bvid || '').toLowerCase() === id.value.toLowerCase()
+        : String(pageData?.aid || '') === id.value;
+      if (!matches) throw error;
+      data = pageData;
+      log('信息', '视频接口暂不可用，使用当前页面已有的视频信息');
+    }
 
     const pages = data.pages || [];
     const page = pages[pageIndex] || pages[0];
@@ -937,6 +950,16 @@
     return msg;
   }
 
+  function formatAgentError(err, type) {
+    if (type !== 'RESOLVE_VIDEO' && type !== 'GET_QUALITIES') return formatDownloadError(err);
+    const msg = err?.message || String(err);
+    if (/HTTP (?:403|412)|API code=-403/.test(msg)) {
+      return 'B 站视频接口暂不可用，请稍后刷新页面重试';
+    }
+    if (/超时/.test(msg)) return '视频信息读取超时，请刷新页面重试';
+    return msg;
+  }
+
   async function pageDownload(session, urls, onProgress, preferHost, trackId = 'default') {
     const list = (Array.isArray(urls) ? urls : [urls])
       .filter((u) => isDownloadableCdnUrl(u) || isRewriteableStreamUrl(u));
@@ -1361,7 +1384,7 @@
           reply(id, { type: 'ERR', error: '未知请求: ' + type });
       }
     } catch (err) {
-      reply(id, { type: 'ERR', error: formatDownloadError(err) });
+      reply(id, { type: 'ERR', error: formatAgentError(err, type) });
     }
   });
 

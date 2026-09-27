@@ -1,6 +1,16 @@
 const EXT = typeof browser !== 'undefined' ? browser : chrome;
 const VERSION = EXT.runtime.getManifest().version;
 document.getElementById('app-version').textContent = 'v' + VERSION;
+const THEME_PREF_KEY = 'biliDlTheme_v1';
+function applyPopupTheme(value) {
+  document.body.dataset.theme = ['tokyo-love', 'manchester-sea', 'chinese-odyssey'].includes(value) ? value : 'bilibili';
+}
+EXT.storage.local.get(THEME_PREF_KEY)
+  .then((data) => applyPopupTheme(data[THEME_PREF_KEY]))
+  .catch(() => {});
+EXT.storage.onChanged?.addListener((changes, area) => {
+  if (area === 'local' && changes[THEME_PREF_KEY]) applyPopupTheme(changes[THEME_PREF_KEY].newValue);
+});
 
 const $ = (id) => document.getElementById(id);
 
@@ -208,7 +218,8 @@ function showState(name) {
 
 function readPageState() {
   const state = window.__INITIAL_STATE__;
-  if (state?.videoData) {
+  const bvid = location.pathname.match(/\/video\/(BV[a-zA-Z0-9]+)/i)?.[1];
+  if (state?.videoData && (!bvid || String(state.videoData.bvid || '').toLowerCase() === bvid.toLowerCase())) {
     const v = state.videoData;
     return {
       title: v.title,
@@ -219,13 +230,22 @@ function readPageState() {
       pages: v.pages?.length || 1
     };
   }
-  return null;
+  const title = document.querySelector('h1.video-title')?.textContent?.trim()
+    || document.querySelector('meta[property="og:title"]')?.content?.trim();
+  if (!title) return null;
+  return {
+    title,
+    author: document.querySelector('.up-name')?.textContent?.trim() || '',
+    pic: document.querySelector('meta[property="og:image"]')?.content || '',
+    pages: 1
+  };
 }
 
 async function fallbackFromPage(tabId) {
   const [{ result }] = await EXT.scripting.executeScript({
     target: { tabId },
-    func: readPageState
+    func: readPageState,
+    world: 'MAIN'
   });
   return result;
 }
@@ -283,11 +303,11 @@ function renderVideo(data) {
     clearNode(tagsEl);
     const el = document.createElement('span');
     el.className = 'popup-q-tag';
-    el.textContent = '暂无可用清晰度';
+    el.textContent = data.qualityError ? '清晰度暂不可用，请稍后重试' : '暂无可用清晰度';
     tagsEl.appendChild(el);
   }
 
-  $('btn-open-panel').disabled = !qualities.length;
+  $('btn-open-panel').disabled = !qualities.length && !data.qualityError;
 }
 
 async function init() {

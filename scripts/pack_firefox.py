@@ -5,6 +5,8 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'bilibili-downloader-firefox.xpi')
+# Firefox 商店版本可独立于 Chromium manifest.json 递增。
+FIREFOX_RELEASE_VERSION = '1.2.2'
 
 INCLUDE = {
     'background.js',
@@ -14,9 +16,12 @@ INCLUDE = {
     'popup/popup.html', 'popup/popup.js', 'popup/popup.css',
     'lib/mp4-remux.iife.js', 'lib/m4s-mux.js', 'lib/m4s-mux-worker.js',
     'icons/icon128.png', 'icons/icon48.png', 'icons/icon32.png', 'icons/icon16.png',
+    'assets/donate-wechat.jpg', 'assets/donate-alipay.jpg',
 }
-DEBUG_CATALOG_MARKER = 'const REMOTE_CATALOG_DEBUG_REFRESH = true;'
-RELEASE_CATALOG_MARKER = 'const REMOTE_CATALOG_DEBUG_REFRESH = false;'
+DEBUG_REFRESH_MARKERS = (
+    ('const REMOTE_CATALOG_DEBUG_REFRESH = true;', 'const REMOTE_CATALOG_DEBUG_REFRESH = false;'),
+    ('const REMOTE_CONTENT_DEBUG_REFRESH = true;', 'const REMOTE_CONTENT_DEBUG_REFRESH = false;'),
+)
 
 
 def packaged_bytes(rel, path):
@@ -25,14 +30,17 @@ def packaged_bytes(rel, path):
             return f.read()
     with open(path, 'r', encoding='utf-8') as f:
         source = f.read()
-    if DEBUG_CATALOG_MARKER not in source:
-        raise SystemExit('PACK FAIL missing remote catalog debug marker')
-    return source.replace(DEBUG_CATALOG_MARKER, RELEASE_CATALOG_MARKER, 1).encode('utf-8')
+    for debug_marker, release_marker in DEBUG_REFRESH_MARKERS:
+        if debug_marker not in source:
+            raise SystemExit(f'PACK FAIL missing remote debug marker: {debug_marker}')
+        source = source.replace(debug_marker, release_marker, 1)
+    return source.encode('utf-8')
 
 
 def build_manifest():
     with open(os.path.join(ROOT, 'manifest.json'), 'r', encoding='utf-8') as f:
         manifest = json.load(f)
+    manifest['version'] = FIREFOX_RELEASE_VERSION
     manifest['background'] = {
         'scripts': ['background.js']
     }
@@ -42,7 +50,7 @@ def build_manifest():
             'data_collection_permissions': {
                 'required': ['none']
             },
-            'strict_min_version': '121.0'
+            'strict_min_version': '128.0'
         }
     }
     return json.dumps(manifest, ensure_ascii=False, indent=2) + '\n'

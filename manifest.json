@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.1.8",
+  "version": "1.2.2",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage", "downloads", "clipboardWrite"],
   "host_permissions": [
@@ -62,7 +62,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "lib/m4s-mux-worker.js", "icons/icon128.png"],
+      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "lib/m4s-mux-worker.js", "icons/icon128.png", "assets/donate-wechat.jpg", "assets/donate-alipay.jpg"],
       "matches": ["https://*.bilibili.com/*"]
     }
   ]

@@ -104,8 +104,8 @@
 #bili-dl-list-select-all[aria-pressed="true"] { background: #fff; border-color: #e5e7eb; color: var(--bdl-accent-strong, #007fba); font-weight: 600; }
 #bili-dl-list-select-all:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
 #bili-dl-list-select-all:disabled { opacity: .45; cursor: default; }
-.bili-dl-list-items { max-height: 280px; overflow: auto; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); margin-bottom: 10px; }
-.bili-dl-list-body.is-queue-running .bili-dl-list-items { max-height: 112px; }
+.bili-dl-list-items { max-height: 310px; overflow: auto; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); margin-bottom: 10px; }
+.bili-dl-list-body.is-queue-running .bili-dl-list-items { max-height: 142px; }
 .bili-dl-list-item { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--bdl-border); cursor: pointer; }
 .bili-dl-list-item:last-child { border-bottom: 0; }
 .bili-dl-list-item-index { color: var(--bdl-text-muted); font-size: 11px; min-width: 18px; text-align: right; }
@@ -166,7 +166,11 @@
   right: 0;
   width: 408px;
   max-width: calc(100vw - 32px);
-  max-height: min(calc(100vh - 200px), 640px);
+  /* 所有标签和信息页共用同一外框高度；短窗口只缩小内容视口。 */
+  height: min(calc(100vh - 200px), 650px);
+  height: min(calc(100dvh - 200px), 650px);
+  max-height: min(calc(100vh - 200px), 650px);
+  max-height: min(calc(100dvh - 200px), 650px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -188,8 +192,6 @@
 
 #bili-dl-menu.is-page {
   animation: none;
-  /* 只保底高度、允许长到 max-height，多余内容在 .bili-dl-page 内滚动 */
-  min-height: var(--bili-dl-sheet-min, 0px);
 }
 
 @media (max-width: 420px) {
@@ -200,15 +202,7 @@
   .bili-dl-list-tools input { min-width: 180px; }
 }
 
-/* /list 页保留悬浮按钮空间；超出的内容由标签内容区滚动。 */
-#bili-dl-menu.is-list-page {
-  height: min(calc(100vh - 120px), 760px);
-  height: min(calc(100dvh - 120px), 760px);
-  max-height: min(calc(100vh - 120px), 760px);
-  max-height: min(calc(100dvh - 120px), 760px);
-}
-
-/* /list 页使用固定外框；滚动交给当前标签的内容视口，页脚始终可见。 */
+/* /list 页滚动交给当前标签内容视口，页脚始终可见。 */
 #bili-dl-menu.is-list-page #bili-dl-home {
   overflow: hidden;
 }
@@ -236,20 +230,24 @@
 }
 
 #bili-dl-menu.is-list-page .bili-dl-list-items {
-  flex: 1 1 0%;
-  min-height: 92px;
-  max-height: none;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(350px, calc(100dvh - 340px));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
+#bili-dl-menu.is-list-page .bili-dl-list-body.is-queue-running .bili-dl-list-items {
+  max-height: 142px;
+}
+
 #bili-dl-menu.is-list-page .bili-dl-list-head,
 #bili-dl-menu.is-list-page .bili-dl-list-tools,
 #bili-dl-menu.is-list-page #bili-dl-list-load-more,
 #bili-dl-menu.is-list-page #bili-dl-list-start,
-#bili-dl-menu.is-list-page #bili-dl-list-queue-cancel,
+#bili-dl-menu.is-list-page #bili-dl-list-job-panel,
 #bili-dl-menu.is-list-page .bili-dl-list-result,
 #bili-dl-menu.is-list-page .bili-dl-list-body > .bili-dl-section {
   flex: 0 0 auto;
@@ -262,7 +260,7 @@
 }
 
 /* 列表下载同时显示清单和任务卡时，两块区域均保持可操作。 */
-#bili-dl-menu.is-list-page .bili-dl-list-body .bili-dl-job-list {
+#bili-dl-menu.is-list-page .bili-dl-list-body .bili-dl-job-panel {
   flex: 0 0 auto;
   min-height: 0;
   max-height: none;
@@ -836,20 +834,56 @@
   color: var(--bdl-text);
 }
 
-#bili-dl-queue-cancel,
-#bili-dl-list-queue-cancel {
-  margin-top: 0;
+.bili-dl-job-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
 }
 
-.bili-dl-queue-actions {
+.bili-dl-job-panel.hidden {
+  display: none;
+}
+
+.bili-dl-job-panel .bili-dl-job-list {
+  margin-top: 0;
+  max-height: none;
+  overflow: visible;
+  gap: 0;
+}
+
+.bili-dl-job-panel .bili-dl-job-list.hidden {
+  display: none;
+}
+
+.bili-dl-job-panel .bili-dl-job-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bili-dl-job-panel .bili-dl-job-card + .bili-dl-job-card {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bdl-border);
+}
+
+.bili-dl-job-panel-queue {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 8px;
 }
 
-.bili-dl-queue-actions.hidden {
+.bili-dl-job-panel-queue.hidden {
   display: none;
+}
+
+.bili-dl-job-list:not(.hidden) + .bili-dl-job-panel-queue {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bdl-border);
 }
 
 .bili-dl-quality-strategy-row,
@@ -1205,6 +1239,8 @@
 
 .bili-dl-footer {
   display: flex;
+  /* 固定高度面板的剩余空间留在内容与导航之间。 */
+  margin-top: auto;
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
@@ -1269,6 +1305,41 @@
   background: #f7fbff;
   border-color: #9ddcfa;
   color: var(--brand-strong, var(--bdl-accent-strong, #007fba));
+}
+
+/* 五个辅助入口保持一行，统一轻量样式。 */
+#bili-dl-panel[data-theme] .bili-dl-footer {
+  gap: 2px;
+  padding: 6px 8px;
+  background: #fff;
+  border-top: 1px solid #eef0f3;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-link,
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-action {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  gap: 3px;
+  padding: 4px 1px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #61666d;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-link svg,
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-action svg {
+  width: 12px;
+  height: 12px;
+}
+
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-link:hover,
+#bili-dl-panel[data-theme] .bili-dl-footer .bili-dl-footer-action:hover {
+  background: #eaf7ff;
+  color: #008cc9;
 }
 
 .bili-dl-footer-plugins {
@@ -1548,6 +1619,76 @@
   margin: 0 0 8px;
 }
 
+.bili-dl-donate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.bili-dl-info-body .bili-dl-donate-intro {
+  align-self: stretch;
+  margin: 0;
+  color: #61666d;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.bili-dl-donate-methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.bili-dl-donate-method {
+  min-height: 34px;
+  border: 1px solid #e3e5e7;
+  border-radius: 7px;
+  background: #f7f8fa;
+  color: #61666d;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bili-dl-donate-method.active {
+  border-color: #00a1d6;
+  background: #eaf7ff;
+  color: #008cc9;
+  font-weight: 600;
+}
+
+.bili-dl-donate-code {
+  position: relative;
+  width: 264px;
+  height: 264px;
+  overflow: hidden;
+  border: 1px solid #e8eaed;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.bili-dl-donate-code img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  height: auto;
+}
+
+/* 仅裁掉原图周围的大面积装饰留白，不重新生成二维码。 */
+.bili-dl-donate-code[data-method="wechat"] img {
+  top: -75px;
+  left: -148px;
+  width: 560px;
+}
+
+.bili-dl-donate-code[data-method="alipay"] img {
+  top: -205px;
+  left: -93px;
+  width: 450px;
+}
+
 .bili-dl-settings-row {
   display: flex;
   align-items: center;
@@ -1556,6 +1697,145 @@
   margin: 0 0 12px;
   color: var(--bdl-text-muted);
   font-size: 12px;
+}
+
+.bili-dl-settings-theme-control {
+  position: relative;
+  z-index: 2;
+  width: 210px;
+  max-width: 66%;
+  flex: 0 1 210px;
+}
+
+.bili-dl-settings-theme-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--bdl-border);
+  border-radius: var(--bdl-radius);
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bili-dl-settings-theme-trigger:hover,
+.bili-dl-settings-theme-trigger[aria-expanded="true"] {
+  border-color: var(--bdl-accent-border);
+}
+
+.bili-dl-settings-theme-current-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bili-dl-settings-theme-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid rgb(24 24 27 / 12%);
+  border-radius: 5px;
+  background: linear-gradient(135deg, #009ddb, #0074da);
+}
+
+.bili-dl-settings-theme-swatch[data-theme="tokyo-love"] {
+  background: linear-gradient(135deg, #1E2A44 5%, #34435F 60%, #E43D30 100%);
+}
+
+.bili-dl-settings-theme-swatch[data-theme="manchester-sea"] {
+  background: linear-gradient(135deg, #6F8C97, #2F5F73 65%, #8A3B3A);
+}
+
+.bili-dl-settings-theme-swatch[data-theme="chinese-odyssey"] {
+  background: linear-gradient(135deg, #D8C3A6, #C97A3E 50%, #A6456B);
+}
+
+.bili-dl-settings-theme-chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  margin: -4px 2px 0 auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.bili-dl-settings-theme-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 8px;
+  background: var(--bdl-bg);
+  box-shadow: 0 8px 22px rgb(24 24 27 / 16%);
+}
+
+.bili-dl-settings-theme-options.hidden {
+  display: none;
+}
+
+.bili-dl-settings-theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--bdl-text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bili-dl-settings-theme-option:hover,
+.bili-dl-settings-theme-option[aria-selected="true"] {
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent-strong);
+}
+
+.bili-dl-settings-theme-option:focus-visible,
+.bili-dl-settings-theme-trigger:focus-visible {
+  outline: 2px solid var(--bdl-accent);
+  outline-offset: 1px;
+}
+
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-mode-tabs button.active,
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-pill.active,
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-donate-method.active {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-footer .bili-dl-footer-link:hover,
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-footer .bili-dl-footer-action:hover,
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) .bili-dl-footer-plugins {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+#bili-dl-panel:is([data-theme="tokyo-love"], [data-theme="manchester-sea"], [data-theme="chinese-odyssey"]) #bili-dl-list-select-all:hover {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
 }
 
 .bili-dl-settings-select {
@@ -1686,6 +1966,23 @@
   display: block;
   margin-bottom: 4px;
   font-size: 11px;
+}
+
+.bili-dl-notice-coop {
+  margin-top: 16px;
+  border-style: dashed;
+  background: var(--bdl-bg);
+}
+
+.bili-dl-notice-coop-line {
+  margin: 0 0 6px;
+  color: var(--bdl-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.bili-dl-notice-coop-line:last-child {
+  margin-bottom: 0;
 }
 
 /* ===== 格式切换 ===== */
