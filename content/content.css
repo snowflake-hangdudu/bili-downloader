@@ -1607,8 +1607,9 @@
   margin-top: 0;
 }
 
-/* 诊断日志仅保留代码入口，底栏不对普通用户展示。 */
-.bili-dl-footer-links [data-sheet="diagnostics"] {
+/* 诊断日志、任务中心仅保留代码入口，底栏不对普通用户展示。 */
+.bili-dl-footer-links [data-sheet="diagnostics"],
+.bili-dl-footer-links [data-sheet="tasks"] {
   display: none !important;
 }
 

@@ -41,6 +41,7 @@ assert.match(js, /if \(!el \|\| job\.cancelRequested \|\| queueCancelled\) retur
 assert.match(js, /async function ensureListItemVideoIds\(item\)/);
 assert.match(js, /item\.aid = String\(resolved\.info\.aid/);
 assert.match(css, /\.bili-dl-footer-links \[data-sheet="diagnostics"\][\s\S]*display:\s*none/);
+assert.match(css, /\.bili-dl-footer-links \[data-sheet="tasks"\][\s\S]*display:\s*none/);
 
 console.log('Space quality tiers, profile, and download-all visibility checks passed');
 
