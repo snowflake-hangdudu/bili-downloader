@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage", "downloads", "clipboardWrite"],
   "host_permissions": [
@@ -41,9 +41,12 @@
       "js": [
         "shared/filename.js",
         "shared/download-settings.js",
+        "shared/theme-manager.js",
+        "shared/i18n.js",
+        "shared/i18n-extra.js",
         "content/content.js"
       ],
-      "css": ["content/content.css", "shared/design-system.css"],
+      "css": ["content/content.css", "shared/design-system.css", "shared/ambient-themes.css"],
       "run_at": "document_end"
     }
   ],
@@ -64,7 +67,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "lib/m4s-mux-worker.js", "icons/icon128.png", "assets/donate-wechat.jpg", "assets/donate-alipay.jpg"],
+      "resources": ["lib/mp4-remux.iife.js", "lib/m4s-mux.js", "lib/m4s-mux-worker.js", "icons/icon128.png", "assets/donate-wechat.jpg", "assets/donate-alipay.jpg", "shared/themes-ambient-full.json"],
       "matches": ["https://*.bilibili.com/*"]
     }
   ]

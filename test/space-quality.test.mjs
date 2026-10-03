@@ -27,9 +27,9 @@ assert.equal(chooseSpaceQuality([{ qn: 120, label: '4K' }], '1080'), undefined);
 const js = source;
 assert.match(js, /function syncSpaceDownloadAllVisibility\(/);
 assert.match(js, /if \(isSpacePage\(\)\) \{[\s\S]*renderSpaceQuality\(\);[\s\S]*return;/);
-assert.match(js, /最高可用/);
-assert.match(js, /最高 1080P/);
-assert.match(js, /最高 720P/);
+assert.match(js, /spaceQualityTierHighest/);
+assert.match(js, /spaceQualityTier1080/);
+assert.match(js, /spaceQualityTier720/);
 assert.match(js, /bili-dl-space-profile-meta/);
 assert.match(js, /function readSpaceAvatarUrl\(/);
 assert.match(js, /function refreshSpaceCurrentPage\(/);
@@ -40,8 +40,13 @@ assert.match(js, /listQueueLayout = queueRunning && operationMode === 'list' && 
 assert.match(js, /if \(!el \|\| job\.cancelRequested \|\| queueCancelled\) return;/);
 assert.match(js, /async function ensureListItemVideoIds\(item\)/);
 assert.match(js, /item\.aid = String\(resolved\.info\.aid/);
+assert.doesNotMatch(css, /\.bili-dl-footer-links \[data-sheet="notice"\]/);
+assert.match(css, /\.bili-dl-footer-links \[data-sheet="plugins"\][\s\S]*display:\s*none/);
 assert.match(css, /\.bili-dl-footer-links \[data-sheet="diagnostics"\][\s\S]*display:\s*none/);
 assert.match(css, /\.bili-dl-footer-links \[data-sheet="tasks"\][\s\S]*display:\s*none/);
+assert.match(js, /const HIDDEN_FOOTER_SHEETS = new Set\(\['plugins', 'diagnostics', 'tasks'\]\)/);
+assert.match(js, /notice: \{ enabled: true/);
+assert.match(js, /const REMOTE_CONTENT_DEBUG_REFRESH = false;/);
 
 console.log('Space quality tiers, profile, and download-all visibility checks passed');
 

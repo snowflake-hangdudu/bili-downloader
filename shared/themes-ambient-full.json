@@ -1,0 +1,320 @@
+{
+  "themes": [
+    {
+      "id": "cyan-mist",
+      "name": "苍雾青",
+      "mode": "dark",
+      "colors": {
+        "background": "#0C1014",
+        "surface": "rgba(18, 24, 32, 0.78)",
+        "surfaceHover": "rgba(23, 33, 43, 0.84)",
+        "surfaceStrong": "rgba(27, 38, 49, 0.88)",
+        "border": "rgba(103, 214, 227, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#F5F7FA",
+        "textSecondary": "#C3CBD5",
+        "textMuted": "#8A97A6",
+        "primary": "#67D6E3",
+        "primaryStrong": "#40B8D0",
+        "primaryHover": "#7EE3EE",
+        "primarySoft": "rgba(22, 52, 60, 0.72)",
+        "primaryBorder": "rgba(103, 214, 227, 0.34)",
+        "accent": "#88E7F2",
+        "accentSecondary": "#2C4153"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 8% 14%, rgba(71, 224, 235, 0.26) 0%, rgba(71, 224, 235, 0.10) 20%, transparent 40%), radial-gradient(circle at 88% 18%, rgba(69, 124, 152, 0.18) 0%, transparent 34%), radial-gradient(circle at 50% 92%, rgba(64, 184, 208, 0.10) 0%, transparent 38%)",
+        "primaryButton": "linear-gradient(180deg, #56C9D8 0%, #2E9CB3 100%)",
+        "preview": "radial-gradient(circle at 14% 78%, rgba(71, 224, 235, 0.88) 0%, rgba(71, 224, 235, 0.32) 18%, rgba(71, 224, 235, 0.08) 34%, transparent 52%), radial-gradient(circle at 38% 40%, rgba(24, 51, 87, 0.62) 0%, transparent 36%), radial-gradient(circle at 76% 22%, rgba(120, 168, 157, 0.18) 0%, transparent 34%), linear-gradient(135deg, #081018 0%, #101C28 52%, #16242B 100%)",
+        "header": "linear-gradient(90deg, rgba(103, 214, 227, 0.18) 0%, rgba(64, 184, 208, 0.08) 42%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.035,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.18)"
+      }
+    },
+    {
+      "id": "violet-haze",
+      "name": "夜雾紫",
+      "mode": "dark",
+      "colors": {
+        "background": "#0D0E16",
+        "surface": "rgba(20, 23, 37, 0.78)",
+        "surfaceHover": "rgba(26, 30, 48, 0.84)",
+        "surfaceStrong": "rgba(33, 37, 58, 0.88)",
+        "border": "rgba(142, 121, 255, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#F6F7FB",
+        "textSecondary": "#C7CAD8",
+        "textMuted": "#949AAF",
+        "primary": "#8E79FF",
+        "primaryStrong": "#735CF0",
+        "primaryHover": "#A291FF",
+        "primarySoft": "rgba(34, 31, 63, 0.72)",
+        "primaryBorder": "rgba(142, 121, 255, 0.34)",
+        "accent": "#B09DFF",
+        "accentSecondary": "#2A3350"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 10% 10%, rgba(111, 91, 236, 0.24) 0%, rgba(111, 91, 236, 0.10) 20%, transparent 40%), radial-gradient(circle at 90% 18%, rgba(139, 92, 246, 0.16) 0%, transparent 34%), radial-gradient(circle at 48% 90%, rgba(63, 46, 141, 0.12) 0%, transparent 38%)",
+        "primaryButton": "linear-gradient(180deg, #8A73F8 0%, #6957D8 100%)",
+        "preview": "radial-gradient(circle at 82% 18%, rgba(131, 95, 255, 0.38) 0%, transparent 36%), radial-gradient(circle at 50% 68%, rgba(62, 46, 141, 0.44) 0%, transparent 42%), radial-gradient(circle at 20% 86%, rgba(10, 10, 18, 0.85) 0%, transparent 34%), linear-gradient(135deg, #0B0C13 0%, #17152A 58%, #271F4A 100%)",
+        "header": "linear-gradient(90deg, rgba(142, 121, 255, 0.18) 0%, rgba(115, 92, 240, 0.08) 45%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.035,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.20)"
+      }
+    },
+    {
+      "id": "ember",
+      "name": "余烬橙",
+      "mode": "dark",
+      "colors": {
+        "background": "#120D0A",
+        "surface": "rgba(26, 18, 14, 0.78)",
+        "surfaceHover": "rgba(36, 24, 19, 0.84)",
+        "surfaceStrong": "rgba(46, 30, 23, 0.88)",
+        "border": "rgba(255, 122, 28, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#FAF7F5",
+        "textSecondary": "#D7C6BD",
+        "textMuted": "#A38C7F",
+        "primary": "#FF7A1C",
+        "primaryStrong": "#E85E00",
+        "primaryHover": "#FF8F3B",
+        "primarySoft": "rgba(58, 33, 22, 0.72)",
+        "primaryBorder": "rgba(255, 122, 28, 0.34)",
+        "accent": "#FFB173",
+        "accentSecondary": "#4A2A1C"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 92% 16%, rgba(255, 120, 18, 0.28) 0%, rgba(255, 120, 18, 0.12) 20%, transparent 42%), radial-gradient(circle at 70% 62%, rgba(159, 58, 0, 0.14) 0%, transparent 34%), radial-gradient(circle at 8% 26%, rgba(0, 0, 0, 0.42) 0%, transparent 34%)",
+        "primaryButton": "linear-gradient(180deg, #FF872D 0%, #E55E08 100%)",
+        "preview": "radial-gradient(circle at 84% 24%, rgba(255, 120, 18, 0.96) 0%, rgba(255, 120, 18, 0.48) 20%, rgba(255, 120, 18, 0.12) 40%, transparent 58%), radial-gradient(circle at 65% 72%, rgba(159, 58, 0, 0.26) 0%, transparent 34%), radial-gradient(circle at 24% 44%, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.86) 34%, transparent 58%), linear-gradient(135deg, #050506 0%, #130A08 56%, #2A120B 100%)",
+        "header": "linear-gradient(90deg, rgba(255, 122, 28, 0.18) 0%, rgba(232, 94, 0, 0.08) 44%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.04,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.22)"
+      }
+    },
+    {
+      "id": "bronze-smoke",
+      "name": "铜烟棕",
+      "mode": "dark",
+      "colors": {
+        "background": "#12100F",
+        "surface": "rgba(25, 22, 20, 0.78)",
+        "surfaceHover": "rgba(33, 28, 25, 0.84)",
+        "surfaceStrong": "rgba(42, 36, 32, 0.88)",
+        "border": "rgba(184, 116, 69, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#F6F3F1",
+        "textSecondary": "#CDC5BF",
+        "textMuted": "#978C85",
+        "primary": "#B87445",
+        "primaryStrong": "#9C5D34",
+        "primaryHover": "#C98858",
+        "primarySoft": "rgba(45, 34, 27, 0.72)",
+        "primaryBorder": "rgba(184, 116, 69, 0.34)",
+        "accent": "#D1A37F",
+        "accentSecondary": "#40352F"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 12% 20%, rgba(203, 114, 43, 0.22) 0%, rgba(203, 114, 43, 0.08) 22%, transparent 42%), radial-gradient(circle at 82% 68%, rgba(53, 28, 19, 0.14) 0%, transparent 34%), radial-gradient(circle at 54% 8%, rgba(255, 201, 167, 0.05) 0%, transparent 26%)",
+        "primaryButton": "linear-gradient(180deg, #B97A4F 0%, #91522D 100%)",
+        "preview": "radial-gradient(circle at 16% 26%, rgba(203, 114, 43, 0.72) 0%, rgba(203, 114, 43, 0.26) 24%, transparent 48%), radial-gradient(circle at 78% 58%, rgba(53, 28, 19, 0.65) 0%, transparent 34%), radial-gradient(circle at 56% 12%, rgba(255, 201, 167, 0.08) 0%, transparent 28%), linear-gradient(135deg, #0C0B0B 0%, #1B1412 56%, #2A1A14 100%)",
+        "header": "linear-gradient(90deg, rgba(184, 116, 69, 0.18) 0%, rgba(156, 93, 52, 0.08) 42%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.035,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.20)"
+      }
+    },
+    {
+      "id": "deep-ocean",
+      "name": "深海蓝",
+      "mode": "dark",
+      "colors": {
+        "background": "#08131A",
+        "surface": "rgba(15, 29, 38, 0.78)",
+        "surfaceHover": "rgba(19, 37, 50, 0.84)",
+        "surfaceStrong": "rgba(24, 48, 65, 0.88)",
+        "border": "rgba(58, 168, 209, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#F3F8FB",
+        "textSecondary": "#C0CDD8",
+        "textMuted": "#879AA8",
+        "primary": "#3AA8D1",
+        "primaryStrong": "#2D86AC",
+        "primaryHover": "#52B8DB",
+        "primarySoft": "rgba(22, 49, 64, 0.72)",
+        "primaryBorder": "rgba(58, 168, 209, 0.34)",
+        "accent": "#7DD9E8",
+        "accentSecondary": "#22384A"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 90% 82%, rgba(105, 236, 255, 0.18) 0%, rgba(105, 236, 255, 0.06) 18%, transparent 38%), radial-gradient(circle at 50% 34%, rgba(22, 88, 124, 0.18) 0%, transparent 34%), radial-gradient(circle at 12% 18%, rgba(3, 17, 32, 0.36) 0%, transparent 32%)",
+        "primaryButton": "linear-gradient(180deg, #3FAED8 0%, #2A7DA3 100%)",
+        "preview": "radial-gradient(circle at 86% 80%, rgba(105, 236, 255, 0.45) 0%, rgba(105, 236, 255, 0.14) 18%, transparent 38%), radial-gradient(circle at 54% 36%, rgba(22, 88, 124, 0.42) 0%, transparent 34%), radial-gradient(circle at 26% 24%, rgba(3, 17, 32, 0.72) 0%, transparent 30%), linear-gradient(135deg, #071118 0%, #0F3145 60%, #154E63 100%)",
+        "header": "linear-gradient(90deg, rgba(58, 168, 209, 0.16) 0%, rgba(125, 217, 232, 0.08) 45%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.035,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.20)"
+      }
+    },
+    {
+      "id": "obsidian",
+      "name": "曜石黑",
+      "mode": "dark",
+      "colors": {
+        "background": "#090A0D",
+        "surface": "rgba(17, 19, 25, 0.78)",
+        "surfaceHover": "rgba(23, 26, 34, 0.84)",
+        "surfaceStrong": "rgba(30, 34, 45, 0.88)",
+        "border": "rgba(116, 131, 247, 0.18)",
+        "borderSoft": "rgba(255, 255, 255, 0.08)",
+        "textPrimary": "#F7F8FA",
+        "textSecondary": "#C9CED7",
+        "textMuted": "#8C96A4",
+        "primary": "#7A89FF",
+        "primaryStrong": "#5D6CF0",
+        "primaryHover": "#93A0FF",
+        "primarySoft": "rgba(26, 32, 56, 0.72)",
+        "primaryBorder": "rgba(122, 137, 255, 0.34)",
+        "accent": "#A495FF",
+        "accentSecondary": "#2A3147"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 8% 14%, rgba(97, 112, 255, 0.26) 0%, rgba(97, 112, 255, 0.10) 20%, transparent 40%), radial-gradient(circle at 92% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 34%), radial-gradient(circle at 52% 92%, rgba(45, 75, 120, 0.11) 0%, transparent 38%)",
+        "primaryButton": "linear-gradient(180deg, #8171F1 0%, #6655D7 100%)",
+        "preview": "radial-gradient(circle at 18% 8%, rgba(97,112,255,.30) 0%, transparent 38%), radial-gradient(circle at 84% 18%, rgba(139,92,246,.18) 0%, transparent 30%), linear-gradient(135deg, #07080B 0%, #0E1017 56%, #151927 100%)",
+        "header": "linear-gradient(90deg, rgba(122, 137, 255, 0.16) 0%, rgba(164, 149, 255, 0.07) 45%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.035,
+        "shadow": "0 10px 30px rgba(0, 0, 0, 0.22)"
+      }
+    },
+    {
+      "id": "tokyo-love",
+      "name": "东爱主题",
+      "mode": "light",
+      "colors": {
+        "background": "#FBF8F3",
+        "surface": "rgba(245, 241, 234, 0.82)",
+        "surfaceHover": "rgba(237, 231, 222, 0.88)",
+        "surfaceStrong": "rgba(227, 219, 207, 0.92)",
+        "border": "rgba(33, 49, 77, 0.16)",
+        "borderSoft": "rgba(33, 49, 77, 0.08)",
+        "textPrimary": "#1B1D22",
+        "textSecondary": "#4A5060",
+        "textMuted": "#6A7180",
+        "primary": "#21314D",
+        "primaryStrong": "#1B2740",
+        "primaryHover": "#344663",
+        "primarySoft": "rgba(234, 239, 246, 0.78)",
+        "primaryBorder": "rgba(33, 49, 77, 0.28)",
+        "accent": "#D94B42",
+        "accentSecondary": "#C8B9A6"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 12% 14%, rgba(46, 64, 98, 0.16) 0%, transparent 30%), radial-gradient(circle at 88% 74%, rgba(217, 75, 66, 0.18) 0%, rgba(217, 75, 66, 0.06) 20%, transparent 40%), radial-gradient(circle at 52% 48%, rgba(255, 255, 255, 0.42) 0%, transparent 28%)",
+        "primaryButton": "linear-gradient(180deg, #344663 0%, #21314D 100%)",
+        "preview": "radial-gradient(circle at 18% 18%, rgba(46, 64, 98, 0.20) 0%, transparent 28%), radial-gradient(circle at 82% 72%, rgba(217, 75, 66, 0.30) 0%, rgba(217, 75, 66, 0.12) 18%, transparent 40%), radial-gradient(circle at 56% 52%, rgba(255, 255, 255, 0.54) 0%, transparent 24%), linear-gradient(135deg, #F3EEE5 0%, #E7E2DA 52%, #D7D1CC 100%)",
+        "header": "linear-gradient(90deg, rgba(33, 49, 77, 0.12) 0%, rgba(217, 75, 66, 0.10) 68%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.025,
+        "shadow": "0 10px 30px rgba(35, 42, 56, 0.08)"
+      }
+    },
+    {
+      "id": "manchester-sea",
+      "name": "海边的曼彻斯特",
+      "mode": "light",
+      "colors": {
+        "background": "#EEF1EE",
+        "surface": "rgba(247, 248, 245, 0.82)",
+        "surfaceHover": "rgba(232, 236, 234, 0.88)",
+        "surfaceStrong": "rgba(217, 226, 227, 0.92)",
+        "border": "rgba(59, 103, 122, 0.16)",
+        "borderSoft": "rgba(59, 103, 122, 0.08)",
+        "textPrimary": "#2C3440",
+        "textSecondary": "#4A565D",
+        "textMuted": "#607079",
+        "primary": "#3B677A",
+        "primaryStrong": "#2F4E61",
+        "primaryHover": "#4D7C8F",
+        "primarySoft": "rgba(231, 239, 241, 0.78)",
+        "primaryBorder": "rgba(59, 103, 122, 0.28)",
+        "accent": "#7E514B",
+        "accentSecondary": "#9E9486"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 18% 14%, rgba(164, 185, 190, 0.24) 0%, transparent 34%), radial-gradient(circle at 72% 52%, rgba(70, 109, 122, 0.14) 0%, transparent 30%), radial-gradient(circle at 90% 82%, rgba(126, 81, 75, 0.10) 0%, transparent 24%)",
+        "primaryButton": "linear-gradient(180deg, #5F8391 0%, #3B677A 100%)",
+        "preview": "radial-gradient(circle at 20% 18%, rgba(164, 185, 190, 0.42) 0%, transparent 34%), radial-gradient(circle at 68% 54%, rgba(70, 109, 122, 0.24) 0%, transparent 28%), radial-gradient(circle at 88% 80%, rgba(126, 81, 75, 0.18) 0%, transparent 20%), linear-gradient(135deg, #EEF1ED 0%, #DDE5E5 58%, #C7D2D4 100%)",
+        "header": "linear-gradient(90deg, rgba(95, 131, 145, 0.14) 0%, rgba(59, 103, 122, 0.08) 54%, rgba(126, 81, 75, 0.06) 82%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.025,
+        "shadow": "0 10px 30px rgba(31, 52, 61, 0.08)"
+      }
+    },
+    {
+      "id": "chinese-odyssey",
+      "name": "大话西游",
+      "mode": "light",
+      "colors": {
+        "background": "#F7F1E7",
+        "surface": "rgba(251, 246, 238, 0.82)",
+        "surfaceHover": "rgba(241, 230, 215, 0.88)",
+        "surfaceStrong": "rgba(232, 215, 194, 0.92)",
+        "border": "rgba(117, 85, 64, 0.16)",
+        "borderSoft": "rgba(117, 85, 64, 0.08)",
+        "textPrimary": "#2C2723",
+        "textSecondary": "#5E4C42",
+        "textMuted": "#726257",
+        "primary": "#755540",
+        "primaryStrong": "#5F4333",
+        "primaryHover": "#906246",
+        "primarySoft": "rgba(243, 229, 214, 0.78)",
+        "primaryBorder": "rgba(117, 85, 64, 0.28)",
+        "accent": "#C97B42",
+        "accentSecondary": "#984866",
+        "deepBlue": "#1D2A42"
+      },
+      "gradients": {
+        "background": "radial-gradient(circle at 20% 20%, rgba(215, 194, 166, 0.26) 0%, transparent 30%), radial-gradient(circle at 58% 46%, rgba(201, 123, 66, 0.18) 0%, transparent 28%), radial-gradient(circle at 86% 34%, rgba(152, 72, 102, 0.12) 0%, transparent 24%)",
+        "primaryButton": "linear-gradient(180deg, #C58652 0%, #7B5842 100%)",
+        "preview": "radial-gradient(circle at 22% 24%, rgba(215, 194, 166, 0.62) 0%, transparent 26%), radial-gradient(circle at 58% 44%, rgba(201, 123, 66, 0.42) 0%, transparent 26%), radial-gradient(circle at 84% 36%, rgba(152, 72, 102, 0.26) 0%, transparent 22%), linear-gradient(135deg, #F4EBDD 0%, #EAD8C4 48%, #D2AE8D 100%)",
+        "header": "linear-gradient(90deg, rgba(216, 195, 166, 0.16) 0%, rgba(201, 123, 66, 0.10) 48%, rgba(152, 72, 102, 0.08) 82%, rgba(255,255,255,0) 100%)"
+      },
+      "effects": {
+        "surfaceBlur": "14px",
+        "headerBlur": "16px",
+        "noiseOpacity": 0.025,
+        "shadow": "0 10px 30px rgba(75, 55, 42, 0.08)"
+      }
+    }
+  ]
+}

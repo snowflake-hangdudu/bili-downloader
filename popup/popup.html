@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="../shared/design-system.css">
+  <link rel="stylesheet" href="../shared/ambient-themes.css">
 </head>
 <body data-theme="bilibili">
   <div class="popup">
     <header class="popup-header">
       <img src="../icons/icon48.png?v=5" width="30" height="30" alt="" class="popup-icon">
       <div class="popup-header-text">
-        <h1>B站视频下载助手</h1>
+        <h1 data-i18n="appTitle">B站视频下载助手</h1>
         <span id="app-version" class="popup-version"></span>
       </div>
     </header>
@@ -19,7 +20,7 @@
       <div id="state-loading">
         <div class="popup-detect loading">
           <span class="popup-dot pulse"></span>
-          <span>正在识别页面…</span>
+          <span data-i18n="identifying">正在识别页面…</span>
         </div>
 
         <div class="popup-video-card is-loading">
@@ -36,9 +37,9 @@
         </div>
 
         <div class="popup-section">
-          <div class="popup-section-head">可用清晰度</div>
+          <div class="popup-section-head" data-i18n="availableQuality">可用清晰度</div>
           <div class="popup-quality-tags">
-            <span class="popup-q-tag loading popup-shimmer w1">加载中</span>
+            <span class="popup-q-tag loading popup-shimmer w1" data-i18n="loading">加载中</span>
             <span class="popup-q-tag loading popup-shimmer w2"></span>
             <span class="popup-q-tag loading popup-shimmer w3"></span>
           </div>
@@ -61,20 +62,20 @@
         </div>
 
         <div class="popup-section">
-          <div class="popup-section-head">可用清晰度</div>
+          <div class="popup-section-head" data-i18n="availableQuality">可用清晰度</div>
           <div id="quality-tags" class="popup-quality-tags"></div>
         </div>
 
         <button id="btn-open-panel" type="button" class="popup-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          打开下载面板
+          <span data-i18n="openPanel">打开下载面板</span>
         </button>
       </div>
 
       <div id="state-empty" class="hidden">
         <div class="popup-detect warn">
           <span class="popup-dot warn"></span>
-          <span>当前不是支持的下载页面</span>
+          <span data-i18n="emptyDetect">当前不是支持的下载页面</span>
         </div>
 
         <div class="popup-empty-hero">
@@ -84,73 +85,76 @@
               <path d="M10 9l5 3-5 3V9z"/>
             </svg>
           </div>
-          <p class="popup-empty-title">支持 /video 播放页与 /list 列表页</p>
-          <p class="popup-empty-desc">请打开 bilibili.com/video/BV…、/video/av… 或 /list/…。首页、搜索、番剧页没有下载入口。</p>
-          <p id="empty-current-site" class="popup-empty-site">当前页面：—</p>
+          <p class="popup-empty-title" data-i18n="emptyTitle">支持 /video 播放页与 /list 列表页</p>
+          <p class="popup-empty-desc" data-i18n="emptyDesc">请打开 bilibili.com/video/BV…、/video/av… 或 /list/…。首页、搜索、番剧页没有下载入口。</p>
+          <p id="empty-current-site" class="popup-empty-site" data-i18n="currentPageEmpty">当前页面：—</p>
         </div>
 
         <div class="popup-steps">
           <div class="popup-step">
             <span class="popup-step-num">1</span>
-            <span class="popup-step-text">打开视频页（BV / av）或列表页</span>
+            <span class="popup-step-text" data-i18n="stepOpen">打开视频页（BV / av）或列表页</span>
           </div>
           <div class="popup-step">
             <span class="popup-step-num">2</span>
-            <span class="popup-step-text">点击页面右下角悬浮按钮</span>
+            <span class="popup-step-text" data-i18n="stepFab">点击页面右下角悬浮按钮</span>
           </div>
           <div class="popup-step">
             <span class="popup-step-num">3</span>
-            <span class="popup-step-text">选清晰度下载；列表每次最多选 10 条</span>
+            <span class="popup-step-text" data-i18n="stepDownload">选清晰度下载；列表每次最多选 10 条</span>
           </div>
         </div>
 
         <div class="popup-feature-tags">
-          <span class="popup-feature-tag">MP4 / M4A</span>
-          <span class="popup-feature-tag">完全免费</span>
+          <span class="popup-feature-tag" data-i18n="tagMp4">MP4 / M4A</span>
+          <span class="popup-feature-tag" data-i18n="tagFree">完全免费</span>
         </div>
 
         <a id="btn-go-bili" class="popup-btn" href="https://www.bilibili.com/video/BV1GJ411x7h7" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
-          打开示例视频页
+          <span data-i18n="openSample">打开示例视频页</span>
         </a>
       </div>
 
       <div id="state-error" class="hidden">
         <div class="popup-detect error">
           <span class="popup-dot error"></span>
-          <span id="error-text">加载失败</span>
+          <span id="error-text" data-i18n="loadFailed">加载失败</span>
         </div>
         <div class="popup-empty-hero compact">
-          <p class="popup-empty-title">暂时无法读取视频信息</p>
-          <p class="popup-error-hint">请刷新 B 站视频页后，再点击扩展图标重试</p>
+          <p class="popup-empty-title" data-i18n="errorTitle">暂时无法读取视频信息</p>
+          <p class="popup-error-hint" data-i18n="errorHint">请刷新 B 站视频页后，再点击扩展图标重试</p>
         </div>
-        <button id="btn-retry" type="button" class="popup-btn popup-btn-outline">刷新并重试</button>
+        <button id="btn-retry" type="button" class="popup-btn popup-btn-outline" data-i18n="retry">刷新并重试</button>
       </div>
 
       <div class="popup-history-section">
         <button id="popup-history-toggle" type="button" class="popup-history-toggle">
-          下载历史
+          <span data-i18n="history">下载历史</span>
           <span id="popup-history-count" class="popup-history-count hidden"></span>
         </button>
         <div id="popup-history-panel" class="popup-history-panel hidden">
           <div id="popup-history-list" class="popup-history-list"></div>
-          <button id="popup-history-clear" type="button" class="popup-history-clear hidden">清空历史</button>
+          <button id="popup-history-clear" type="button" class="popup-history-clear hidden" data-i18n="historyClear">清空历史</button>
         </div>
       </div>
     </main>
 
     <footer class="popup-footer">
-      <nav class="popup-footer-links" aria-label="帮助链接">
-        <a class="popup-footer-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener">常见问题</a>
+      <nav class="popup-footer-links" data-i18n-aria="helpLinks" aria-label="帮助链接">
+        <a class="popup-footer-link" href="https://snowflake-hangdudu.github.io/bili-downloader/faq.html" target="_blank" rel="noopener" data-i18n="faq">常见问题</a>
         <span class="popup-footer-sep" aria-hidden="true">·</span>
-        <a class="popup-footer-link" href="https://snowflake-hangdudu.github.io/bili-downloader/" target="_blank" rel="noopener">隐私政策</a>
+        <a class="popup-footer-link" href="https://snowflake-hangdudu.github.io/bili-downloader/" target="_blank" rel="noopener" data-i18n="privacy">隐私政策</a>
       </nav>
       <div class="popup-footer-line">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        仅供个人学习 · 请遵守 B 站用户协议
+        <span data-i18n="disclaimer">仅供个人学习 · 请遵守 B 站用户协议</span>
       </div>
     </footer>
   </div>
+  <script src="../shared/theme-manager.js"></script>
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/i18n-extra.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

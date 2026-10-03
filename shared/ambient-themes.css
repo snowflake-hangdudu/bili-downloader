@@ -1,0 +1,105 @@
+/* Ambient themes: runtime tokens come from shared/theme-manager.js */
+
+/* Menu must stay position:absolute (anchored above the button).
+   position:relative here drops it into normal flow and pushes it off the bottom of the page. */
+#bili-dl-panel[data-theme-kind="ambient"] #bili-dl-menu {
+  isolation: isolate;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text-primary);
+}
+
+body[data-theme-kind="ambient"] .popup {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text-primary);
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] #bili-dl-menu::before,
+body[data-theme-kind="ambient"] .popup::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--theme-gradient-background);
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] #bili-dl-menu::after,
+body[data-theme-kind="ambient"] .popup::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--theme-noise-opacity, 0.035);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 0.6px, transparent 0.6px);
+  background-size: 3px 3px;
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] #bili-dl-menu > *,
+body[data-theme-kind="ambient"] .popup > * {
+  position: relative;
+  z-index: 1;
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-header,
+body[data-theme-kind="ambient"] .popup-header {
+  position: relative;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(var(--theme-header-blur, 16px));
+  -webkit-backdrop-filter: blur(var(--theme-header-blur, 16px));
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-header::before,
+body[data-theme-kind="ambient"] .popup-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--theme-gradient-header);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-header > *,
+body[data-theme-kind="ambient"] .popup-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-video-card,
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-job-panel,
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-space-profile,
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-notice-section,
+body[data-theme-kind="ambient"] .popup-video-card {
+  backdrop-filter: blur(var(--theme-surface-blur, 14px));
+  -webkit-backdrop-filter: blur(var(--theme-surface-blur, 14px));
+  box-shadow: var(--theme-shadow);
+}
+
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-btn:not(.bili-dl-btn-secondary),
+body[data-theme-kind="ambient"] .popup-btn-primary {
+  background-image: var(--theme-gradient-button);
+  border-color: var(--brand-border);
+}
+
+#bili-dl-panel[data-theme="bilibili"] .bili-dl-header-icon,
+body[data-theme="bilibili"] .popup-icon {
+  filter: none;
+}
+
+:root[data-theme-mode="dark"],
+#bili-dl-panel[data-theme-mode="dark"],
+body[data-theme-mode="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme-mode="light"],
+#bili-dl-panel[data-theme-mode="light"],
+body[data-theme-mode="light"] {
+  color-scheme: light;
+}

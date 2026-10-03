@@ -94,8 +94,8 @@
     const partTitle = sanitizeSegment(meta?.partTitle || meta?.part_title || title, title) || title;
     const index = pad2(options.index != null ? options.index : 1);
     const quality = format === 'm4a'
-      ? '音频'
-      : sanitizeSegment(options.qualityLabel || meta?.quality || '', '') || '视频';
+      ? (sanitizeSegment(options.qualityLabel, '') || '音频')
+      : (sanitizeSegment(options.qualityLabel || meta?.quality || '', '') || '视频');
     const date = options.date || todayLocal(options.createdAt ? new Date(options.createdAt) : undefined);
     return { title, author, bvid, part, partTitle, index, quality, date };
   }

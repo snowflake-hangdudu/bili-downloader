@@ -154,6 +154,23 @@ test('MP4 and M4A saves override empty/text MIME without changing media bytes', 
     }
   }
 });
+test('invalid filename retries the same Blob once using a short sanitized title', async () => {
+  const h = saveHarness([{ ok: false, error: 'Invalid filename' }, { ok: true, downloadId: 2 }, { ok: true, state: 'complete' }]);
+  assert.equal(await h.save(new Blob(['media']), 'custom.mp4', () => false, '标题🤔 | MEOVV 🐾'), 2);
+  assert.equal(h.calls[1].filename, '标题 _ MEOVV.mp4');
+  assert.equal(h.calls[0].url, h.calls[1].url);
+  assert.equal(h.blobs.length, 1);
+  assert.equal(h.revoked.length, 1);
+});
+test('filename fallback stops after one retry and unrelated errors do not retry', async () => {
+  const h = saveHarness([{ ok: false, error: 'Invalid filename' }, { ok: false, error: 'Invalid filename' }]);
+  await assert.rejects(h.save(new Blob(['media']), 'custom.m4a', () => false, 'CON'), /Invalid filename/);
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1].filename, '_CON.m4a');
+  const other = saveHarness([{ ok: false, error: 'Disk failure' }]);
+  await assert.rejects(other.save(new Blob(['media']), 'custom.mp4', () => false, '标题'), /Disk failure/);
+  assert.equal(other.calls.length, 1);
+});
 test('native save waits for complete, then releases Blob URL', async () => {
   const h = saveHarness([{ ok: true, downloadId: 1 }, { ok: true, state: 'in_progress' }, { ok: true, state: 'complete' }]);
   assert.equal(await h.save(new Blob(['a']), 'a.mp4'), 1);

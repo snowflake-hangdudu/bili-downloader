@@ -11,7 +11,7 @@ assert.match(source, /const FEATURE_FLAGS_URL = `\$\{CONFIG_BASE_URL\}\/api\/fea
 assert.match(source, /const PLUGINS_JSON_URL = `\$\{CONFIG_BASE_URL\}\/api\/plugins`/);
 assert.match(source, /const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v2'/);
 assert.match(source, /const REMOTE_CATALOG_DEBUG_REFRESH = true;/);
-assert.match(source, /const REMOTE_CONTENT_DEBUG_REFRESH = true;/);
+assert.match(source, /const REMOTE_CONTENT_DEBUG_REFRESH = false;/);
 assert.match(source, /!REMOTE_CATALOG_DEBUG_REFRESH && cached\?\.fetchedAt && Date\.now\(\) - cached\.fetchedAt < CONTENT_CACHE_TTL_MS/);
 assert.match(source, /!REMOTE_CONTENT_DEBUG_REFRESH && cached\?\.fetchedAt && Date\.now\(\) - cached\.fetchedAt < CONTENT_CACHE_TTL_MS/);
 assert.match(source, /调试模式：忽略本地缓存并立即刷新公告\/合作配置/);

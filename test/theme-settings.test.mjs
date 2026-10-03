@@ -4,36 +4,51 @@ import vm from 'node:vm';
 
 const content = await readFile(new URL('../content/content.js', import.meta.url), 'utf8');
 const popup = await readFile(new URL('../popup/popup.js', import.meta.url), 'utf8');
-const styles = await readFile(new URL('../shared/design-system.css', import.meta.url), 'utf8');
+const manifest = await readFile(new URL('../manifest.json', import.meta.url), 'utf8');
+const themeManagerSrc = await readFile(new URL('../shared/theme-manager.js', import.meta.url), 'utf8');
+const themesJson = JSON.parse(await readFile(new URL('../shared/themes-ambient-full.json', import.meta.url), 'utf8'));
+const ambientCss = await readFile(new URL('../shared/ambient-themes.css', import.meta.url), 'utf8');
 const settingsCss = await readFile(new URL('../content/content.css', import.meta.url), 'utf8');
 
 assert.match(content, /const THEME_PREF_KEY = 'biliDlTheme_v1'/);
-assert.match(content, /themeEntries = \[\['bilibili', '默认'\]/);
+assert.match(content, /Theme\?\.listEntries\?\.\(\)/);
+assert.match(content, /Theme\.applyToRoot\(themedPanel, value\)/);
 assert.match(content, /option\.onclick = async/);
-assert.match(content, /EXT\.storage\.local\.set\(\{ \[THEME_PREF_KEY\]: value \}\)/);
-assert.match(content, /EXT\.storage\.local\.get\(THEME_PREF_KEY\)/);
+assert.match(content, /EXT\.storage\.local\.set\(\{ \[THEME_PREF_KEY\]: themeId \}\)/);
+assert.match(content, /globalThis\.BiliDlTheme\?\.loadThemes\?\.\(\)/);
 assert.match(content, /changes\[THEME_PREF_KEY\].*applyTheme/);
 assert.match(popup, /const THEME_PREF_KEY = 'biliDlTheme_v1'/);
-assert.match(popup, /EXT\.storage\.local\.get\(THEME_PREF_KEY\)/);
-assert.match(styles, /#bili-dl-panel\[data-theme="tokyo-love"\],[\s\S]*body\[data-theme="tokyo-love"\]/);
-assert.match(styles, /--brand-cta: linear-gradient\(135deg, #34435F, #1E2A44\)/);
-for (const theme of ['tokyo-love', 'manchester-sea', 'chinese-odyssey']) {
-  assert.match(styles, new RegExp(`#bili-dl-panel\\[data-theme="${theme}"\\],[\\s\\S]*body\\[data-theme="${theme}"\\]`));
-}
-assert.match(content, /bili-dl-settings-theme-control/);
-assert.match(content, /currentSwatch\.dataset\.theme = theme/);
-assert.match(settingsCss, /\.bili-dl-settings-theme-options/);
-assert.match(styles, /--brand-cta: linear-gradient\(135deg, #6F8C97, #2F5F73 62%, #2C3440\)/);
-assert.match(styles, /--brand-cta: linear-gradient\(135deg, #C97A3E, #91563A 56%, #6B4E3A\)/);
-assert.match(popup, /\['tokyo-love', 'manchester-sea', 'chinese-odyssey'\]\.includes\(value\)/);
+assert.match(popup, /BiliDlTheme\?\.loadThemes/);
+assert.match(popup, /Theme\.applyToRoot\(document\.body, value\)/);
+assert.match(manifest, /shared\/theme-manager\.js/);
+assert.match(manifest, /shared\/ambient-themes\.css/);
+assert.match(manifest, /shared\/themes-ambient-full\.json/);
+assert.match(ambientCss, /data-theme-kind="ambient"/);
+assert.match(settingsCss, /data-theme-kind="ambient"/);
+assert.doesNotMatch(settingsCss, /data-theme="tokyo-love"/);
 
-const themedPanel = { dataset: {} };
-const themeOptions = ['bilibili', 'tokyo-love', 'manchester-sea', 'chinese-odyssey'].map((theme) => ({
-  dataset: { themeOption: theme, label: theme },
-  setAttribute(name, value) { this[name] = value; }
-}));
+const themeIds = themesJson.themes.map((theme) => theme.id);
+assert.equal(themeIds.length, 9);
+for (const id of ['cyan-mist', 'violet-haze', 'ember', 'bronze-smoke', 'deep-ocean', 'obsidian', 'tokyo-love', 'manchester-sea', 'chinese-odyssey']) {
+  assert.ok(themeIds.includes(id), `missing theme ${id}`);
+}
+
+const vars = {};
+const themedPanel = {
+  dataset: {},
+  style: {
+    setProperty(key, value) { vars[key] = value; },
+    removeProperty(key) { delete vars[key]; }
+  },
+  removeAttribute(name) {
+    delete this.dataset[name.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (name === 'data-theme-mode') delete this.dataset.themeMode;
+    if (name === 'data-theme-kind') delete this.dataset.themeKind;
+  }
+};
+const themeOptions = [];
 const currentLabel = { textContent: '' };
-const currentSwatch = { dataset: {} };
+const currentSwatch = { dataset: {}, style: {} };
 const themeControl = {
   querySelector(selector) {
     if (selector.startsWith('[data-theme-option=')) return themeOptions.find((option) => selector.includes(option.dataset.themeOption));
@@ -44,20 +59,54 @@ const themeControl = {
   querySelectorAll() { return themeOptions; }
 };
 const panel = { querySelector: () => themeControl };
-const helper = content.slice(content.indexOf('    function applyTheme(value)'), content.indexOf('    const toggleBtn ='));
-const context = vm.createContext({ themedPanel, panel });
-vm.runInContext(helper, context);
-context.applyTheme('unknown');
+
+const context = vm.createContext({
+  globalThis: {},
+  browser: { runtime: { getURL: () => 'themes.json' } },
+  fetch: async () => ({
+    ok: true,
+    json: async () => themesJson
+  })
+});
+vm.runInContext(themeManagerSrc, context);
+const Theme = context.globalThis.BiliDlTheme;
+assert.ok(Theme);
+
+await Theme.loadThemes();
+const entries = Theme.listEntries();
+assert.equal(entries[0][0], 'bilibili');
+assert.equal(entries[0][1], '默认');
+assert.equal(entries.length, 10);
+
+entries.forEach(([id, label]) => {
+  themeOptions.push({
+    dataset: { themeOption: id, label },
+    setAttribute(name, value) { this[name] = value; }
+  });
+});
+
+context.globalThis.BiliDlTheme = Theme;
+context.themedPanel = themedPanel;
+context.panel = panel;
+vm.runInContext(content.slice(content.indexOf('    function applyTheme(value)'), content.indexOf('    const toggleBtn =')), context);
+const applyTheme = context.applyTheme;
+
+assert.equal(applyTheme('unknown'), 'bilibili');
 assert.equal(themedPanel.dataset.theme, 'bilibili');
-assert.equal(currentSwatch.dataset.theme, 'bilibili');
-context.applyTheme('tokyo-love');
+assert.equal(themedPanel.dataset.themeKind, undefined);
+
+assert.equal(applyTheme('tokyo-love'), 'tokyo-love');
 assert.equal(themedPanel.dataset.theme, 'tokyo-love');
-assert.equal(currentSwatch.dataset.theme, 'tokyo-love');
-context.applyTheme('manchester-sea');
-assert.equal(themedPanel.dataset.theme, 'manchester-sea');
-assert.equal(currentSwatch.dataset.theme, 'manchester-sea');
-context.applyTheme('chinese-odyssey');
-assert.equal(themedPanel.dataset.theme, 'chinese-odyssey');
-assert.equal(currentSwatch.dataset.theme, 'chinese-odyssey');
+assert.equal(themedPanel.dataset.themeKind, 'ambient');
+
+applyTheme('cyan-mist');
+assert.equal(themedPanel.dataset.theme, 'cyan-mist');
+assert.ok(vars['--theme-gradient-background']);
+assert.ok(vars['--bg']);
+
+applyTheme('bilibili');
+assert.equal(themedPanel.dataset.theme, 'bilibili');
+assert.equal(themedPanel.dataset.themeKind, undefined);
+assert.equal(vars['--bg'], undefined);
 
 console.log('theme settings checks passed');

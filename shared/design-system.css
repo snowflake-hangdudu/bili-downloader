@@ -278,127 +278,7 @@ body[data-theme="douyin"] {
 
 /* END THEME TOKENS */
 
-/* Bilibili-only optional theme; kept outside generated brand tokens. */
-#bili-dl-panel[data-theme="tokyo-love"],
-body[data-theme="tokyo-love"] {
-  --bg: #FFFBF7;
-  --surface: #F6F3EE;
-  --surface-hover: #EFEAE3;
-  --surface-strong: #E9E3DA;
-  --border: #E2DDD6;
-  --border-soft: #EBE6DF;
-  --text-primary: #1C1C1E;
-  --text-secondary: #4F5360;
-  --text-muted: #676C76;
-  --footer-bg: #F6F3EE;
-  --footer-text: #4F5360;
-  --brand: #1E2A44;
-  --brand-strong: #1E2A44;
-  --brand-hover: #34435F;
-  --brand-soft: #EDF0F5;
-  --brand-border: #AAB4C5;
-  --brand-cta: linear-gradient(135deg, #34435F, #1E2A44);
-  --bdl-primary: var(--brand);
-  --bdl-accent: var(--brand);
-  --bdl-primary-strong: var(--brand-strong);
-  --bdl-accent-strong: var(--brand-strong);
-  --bdl-primary-hover: var(--brand-hover);
-  --bdl-accent-hover: var(--brand-hover);
-  --bdl-primary-soft: var(--brand-soft);
-  --bdl-accent-soft: var(--brand-soft);
-  --bdl-primary-border: var(--brand-border);
-  --bdl-accent-border: var(--brand-border);
-  --bdl-primary-contrast: #FFFFFF;
-  --bdl-accent-contrast: #FFFFFF;
-  --bdl-bg: var(--bg);
-  --bdl-surface: var(--surface);
-  --bdl-border: var(--border);
-  --bdl-text: var(--text-primary);
-  --bdl-text-secondary: var(--text-secondary);
-  --bdl-text-muted: var(--text-muted);
-  --bdl-header-text: var(--text-primary);
-}
-
-/* Bilibili-only film-inspired themes; kept outside generated brand tokens. */
-#bili-dl-panel[data-theme="manchester-sea"],
-body[data-theme="manchester-sea"] {
-  --bg: #F1F2ED;
-  --surface: #F8F9F7;
-  --surface-hover: #E9EEF0;
-  --surface-strong: #DCE5E8;
-  --border: #C7D0D1;
-  --border-soft: #DEE4E3;
-  --text-primary: #2C3440;
-  --text-secondary: #48545C;
-  --text-muted: #58656C;
-  --footer-bg: #E9EEF0;
-  --footer-text: #48545C;
-  --brand: #2F5F73;
-  --brand-strong: #2C3440;
-  --brand-hover: #476E7F;
-  --brand-soft: #E5EEF0;
-  --brand-border: #91ACB7;
-  --brand-cta: linear-gradient(135deg, #6F8C97, #2F5F73 62%, #2C3440);
-  --bdl-primary: var(--brand);
-  --bdl-accent: var(--brand);
-  --bdl-primary-strong: var(--brand-strong);
-  --bdl-accent-strong: var(--brand-strong);
-  --bdl-primary-hover: var(--brand-hover);
-  --bdl-accent-hover: var(--brand-hover);
-  --bdl-primary-soft: var(--brand-soft);
-  --bdl-accent-soft: var(--brand-soft);
-  --bdl-primary-border: var(--brand-border);
-  --bdl-accent-border: var(--brand-border);
-  --bdl-primary-contrast: #FFFFFF;
-  --bdl-accent-contrast: #FFFFFF;
-  --bdl-bg: var(--bg);
-  --bdl-surface: var(--surface);
-  --bdl-border: var(--border);
-  --bdl-text: var(--text-primary);
-  --bdl-text-secondary: var(--text-secondary);
-  --bdl-text-muted: var(--text-muted);
-  --bdl-header-text: var(--text-primary);
-}
-
-#bili-dl-panel[data-theme="chinese-odyssey"],
-body[data-theme="chinese-odyssey"] {
-  --bg: #F7F1E6;
-  --surface: #FCF8F0;
-  --surface-hover: #F1E5D5;
-  --surface-strong: #EAD8C3;
-  --border: #D8C3A6;
-  --border-soft: #E9DBCA;
-  --text-primary: #292724;
-  --text-secondary: #5C4A3F;
-  --text-muted: #685A50;
-  --footer-bg: #F1E5D5;
-  --footer-text: #5C4A3F;
-  --brand: #6B4E3A;
-  --brand-strong: #513A2D;
-  --brand-hover: #87583A;
-  --brand-soft: #F3E4D3;
-  --brand-border: #C69A77;
-  --brand-cta: linear-gradient(135deg, #C97A3E, #91563A 56%, #6B4E3A);
-  --bdl-primary: var(--brand);
-  --bdl-accent: var(--brand);
-  --bdl-primary-strong: var(--brand-strong);
-  --bdl-accent-strong: var(--brand-strong);
-  --bdl-primary-hover: var(--brand-hover);
-  --bdl-accent-hover: var(--brand-hover);
-  --bdl-primary-soft: var(--brand-soft);
-  --bdl-accent-soft: var(--brand-soft);
-  --bdl-primary-border: var(--brand-border);
-  --bdl-accent-border: var(--brand-border);
-  --bdl-primary-contrast: #FFFFFF;
-  --bdl-accent-contrast: #FFFFFF;
-  --bdl-bg: var(--bg);
-  --bdl-surface: var(--surface);
-  --bdl-border: var(--border);
-  --bdl-text: var(--text-primary);
-  --bdl-text-secondary: var(--text-secondary);
-  --bdl-text-muted: var(--text-muted);
-  --bdl-header-text: var(--text-primary);
-}
+/* Ambient themes: tokens injected at runtime via shared/theme-manager.js */
 
 /* ---- Shared foundation ---- */
 
@@ -613,7 +493,7 @@ body[data-theme] .video-sub {
   padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -864,7 +744,7 @@ body[data-theme] .popup-btn:not(.popup-btn-outline):hover:not(:disabled) {
 #yt-dl-panel[data-theme] .yt-dl-btn-secondary,
 .dl-kit[data-theme] .dy-dl-btn-secondary,
 body[data-theme] .popup-btn-outline {
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-secondary);
   font-weight: 500;
@@ -996,20 +876,3 @@ body[data-theme] {
   max-width: 408px;
 }
 
-#bili-dl-panel[data-theme="tokyo-love"] .bili-dl-header::after,
-body[data-theme="tokyo-love"] .popup-header::after {
-  background: linear-gradient(90deg, #1E2A44 0%, #E43D30 65%, transparent 100%);
-  opacity: .5;
-}
-
-#bili-dl-panel[data-theme="manchester-sea"] .bili-dl-header::after,
-body[data-theme="manchester-sea"] .popup-header::after {
-  background: linear-gradient(90deg, #6F8C97 0%, #2F5F73 58%, #8A3B3A 85%, transparent 100%);
-  opacity: .55;
-}
-
-#bili-dl-panel[data-theme="chinese-odyssey"] .bili-dl-header::after,
-body[data-theme="chinese-odyssey"] .popup-header::after {
-  background: linear-gradient(90deg, #D8C3A6 0%, #C97A3E 48%, #A6456B 82%, transparent 100%);
-  opacity: .65;
-}

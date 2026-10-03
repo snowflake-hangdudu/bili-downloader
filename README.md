@@ -2,7 +2,7 @@
 
 Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页、`/list/` 列表页及 UP 主空间视频投稿下载，仅供个人学习使用。
 
-- 版本：1.2.3（开发中）
+- 版本：1.2.4
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
