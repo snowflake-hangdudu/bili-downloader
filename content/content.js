@@ -1045,7 +1045,7 @@
     function ratingUrl() {
       const rating = remoteContent.rating || {};
       const key = detectBrowserStore();
-      return httpsUrl(rating[key]) || httpsUrl(rating.url);
+      return httpsUrl(rating[key]);
     }
     function pluginStoreUrl(plugin) {
       const directUrl = httpsUrl(plugin?.stores?.[detectBrowserStore()]);
@@ -1532,11 +1532,49 @@
       const error = appendTextElement(root, 'p', 'bili-dl-settings-error', '');
       error.hidden = true;
 
-      const feedback = document.createElement('p');
+      const feedback = document.createElement('div');
       feedback.className = 'bili-dl-settings-feedback';
       appendTextElement(feedback, 'span', 'bili-dl-settings-feedback-label', t('feedback'));
       appendTextElement(feedback, 'span', 'bili-dl-settings-feedback-email', FEEDBACK_EMAIL);
+      const copyEmail = appendTextElement(feedback, 'button', 'bili-dl-settings-support-action', t('copyFeedbackEmail'));
+      copyEmail.type = 'button';
+      copyEmail.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(FEEDBACK_EMAIL);
+          copyEmail.textContent = t('emailCopied');
+        } catch {
+          copyEmail.textContent = t('copyEmailManual');
+        }
+      };
       root.appendChild(feedback);
+      const ratingCard = appendTextElement(root, 'div', 'bili-dl-settings-rating-card', '');
+      appendTextElement(ratingCard, 'strong', 'bili-dl-settings-rating-title', t('settingsRatingTitle'));
+      appendTextElement(ratingCard, 'p', 'bili-dl-settings-rating-description', t('settingsRatingDescription'));
+      const rate = appendTextElement(ratingCard, 'button', 'bili-dl-settings-support-action bili-dl-settings-rating', t('settingsRatingAction', { store: ratingStoreLabel() }));
+      rate.type = 'button';
+      rate.onclick = async () => {
+        rate.disabled = true;
+        let target;
+        try {
+          // Open synchronously to preserve the user gesture across config loading.
+          target = window.open('about:blank', '_blank');
+          if (target) target.opener = null;
+          await loadRemoteContent();
+          const url = ratingUrl();
+          if (url && target) target.location.href = url;
+          else if (url) window.open(url, '_blank', 'noopener,noreferrer');
+          else {
+            target?.close();
+            rate.textContent = t('ratingUnavailable');
+          }
+        } catch (error) {
+          target?.close();
+          rate.textContent = t('ratingUnavailable');
+          debugLog('评分', error.message || String(error));
+        } finally {
+          rate.disabled = false;
+        }
+      };
       el.appendChild(root);
       applyTheme(themedPanel.dataset.theme);
 
@@ -2688,9 +2726,9 @@
           if (requestId !== estimateRequestId || activeMode === 'list') return;
           currentEstimateBytes = Number(est.sizeBytes) || 0;
           estimateText.textContent = t('estimateSizeLabel', {
-            size: est.sizeLabel || t('estimateSizeUnknown'),
+            size: est.sizeLabel && est.sizeLabel !== '未知' ? est.sizeLabel : t('estimateSizeUnknown'),
             ref: t('estimateForReference'),
-            note: est.estimateNote ? ` · ${est.estimateNote}` : ''
+            note: est.estimateNote === '单文件含音视频' ? ` · ${t('estimateSingleFile')}` : ''
           });
           estimateEl.classList.remove('hidden');
         } catch {
@@ -2717,9 +2755,9 @@
         if (requestId !== estimateRequestId || activeMode === 'list') return;
         currentEstimateBytes = Number(est.sizeBytes) || 0;
         estimateText.textContent = t('estimateSizeLabel', {
-          size: est.sizeLabel || t('estimateSizeUnknown'),
+          size: est.sizeLabel && est.sizeLabel !== '未知' ? est.sizeLabel : t('estimateSizeUnknown'),
           ref: t('estimateForReference'),
-          note: est.estimateNote ? ` · ${est.estimateNote}` : ''
+          note: est.estimateNote === '单文件含音视频' ? ` · ${t('estimateSingleFile')}` : ''
         });
         estimateEl.classList.remove('hidden');
       } catch {
@@ -4268,9 +4306,7 @@
     // 恢复上次拖拽位置；窗口缩放时夹回可视区
     EXT.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
       if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
-        const legacyRight = pos.v !== 2 && pos.left > window.innerWidth - 160;
-        const next = applyFabPos(legacyRight ? 24 : pos.left, pos.top);
-        if (legacyRight) EXT.storage.local.set({ biliDlFabPos: { ...next, v: 2 } }).catch(() => {});
+        applyFabPos(pos.left, pos.top);
       }
       placeMenu();
     }).catch(() => {});

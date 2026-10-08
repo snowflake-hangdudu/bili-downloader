@@ -23,9 +23,9 @@
   --brand-cta: linear-gradient(135deg, #009ddb, #0074da);
 
   position: fixed;
-  /* Left side: the right column is Bilibili's recommendation list. */
-  left: 24px;
-  right: auto;
+  /* 默认靠右；手动拖拽后的 left/top 位置由脚本恢复。 */
+  left: auto;
+  right: 24px;
   bottom: 120px;
   z-index: 999999;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
@@ -101,9 +101,9 @@
 .bili-dl-list-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 #bili-dl-list-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 20px; }
 #bili-dl-list-count { line-height: 16px; }
-#bili-dl-list-select-all { flex: 0 0 auto; min-width: 72px; min-height: 32px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #5f6368; font-weight: 500; white-space: nowrap; cursor: pointer; }
-#bili-dl-list-select-all:hover { background: #f7fbff; border-color: #9ddcfa; color: var(--bdl-accent-strong, #007fba); }
-#bili-dl-list-select-all[aria-pressed="true"] { background: #fff; border-color: #e5e7eb; color: var(--bdl-accent-strong, #007fba); font-weight: 600; }
+#bili-dl-list-select-all { flex: 0 0 auto; min-width: 72px; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bdl-border); border-radius: 8px; background: var(--bdl-surface); color: var(--bdl-text); font-weight: 500; white-space: nowrap; cursor: pointer; }
+#bili-dl-list-select-all:hover { background: var(--bdl-accent-soft); border-color: var(--bdl-accent); color: var(--bdl-accent-strong); }
+#bili-dl-list-select-all[aria-pressed="true"] { background: var(--bdl-accent-soft); border-color: var(--bdl-accent); color: var(--bdl-accent-strong); font-weight: 600; }
 #bili-dl-list-select-all:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
 #bili-dl-list-select-all:disabled { opacity: .45; cursor: default; }
 .bili-dl-list-items { max-height: 310px; overflow: auto; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); margin-bottom: 10px; }
@@ -335,7 +335,10 @@
 .bili-dl-title {
   font-weight: 600;
   font-size: 15px;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .bili-dl-version {
@@ -1275,7 +1278,8 @@
   align-items: flex-start;
   margin: 0 0 10px;
   padding: 12px 14px;
-  background: var(--bdl-surface-soft, #f6f8fb);
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
   border: 1px solid var(--bdl-border, #eef0f3);
   border-radius: 10px;
 }
@@ -1304,7 +1308,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  color: var(--bdl-muted, #6b7280);
+  color: var(--bdl-text-muted);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -1995,6 +1999,7 @@
 }
 
 .bili-dl-settings-line {
+  flex-wrap: wrap;
   justify-content: space-between;
   margin: 0 0 4px;
 }
@@ -2008,7 +2013,9 @@
 }
 
 .bili-dl-settings-preview {
-  flex: 1 1 auto;
+  flex: 1 1 220px;
+  align-items: flex-start;
+  line-height: 1.6;
 }
 
 .bili-dl-settings-preview-label,
@@ -2020,7 +2027,8 @@
 .bili-dl-settings-feedback-email {
   min-width: 0;
   color: var(--bdl-text);
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .bili-dl-settings-feedback-email {
@@ -2028,8 +2036,46 @@
 }
 
 .bili-dl-settings-feedback {
-  margin-top: 2px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 10px;
+  background: var(--bdl-surface);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
 }
+
+.bili-dl-settings-feedback-email { font-size: 12px; line-height: 1.6; }
+.bili-dl-settings-feedback .bili-dl-settings-support-action { justify-self: start; margin-top: 2px; }
+.bili-dl-settings-support-action {
+  box-sizing: border-box;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  padding: 7px 10px;
+  border: 1px solid var(--bdl-accent-border, var(--bdl-border));
+  border-radius: 7px;
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent-strong);
+  font: inherit;
+  cursor: pointer;
+}
+.bili-dl-settings-support-action:hover { border-color: var(--bdl-accent); }
+.bili-dl-settings-support-action:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
+.bili-dl-settings-rating-card {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--bdl-border);
+  border-radius: 10px;
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
+}
+.bili-dl-settings-rating-title { font-size: 13px; font-weight: 600; }
+.bili-dl-settings-rating-description { margin: 6px 0 12px; color: var(--bdl-text-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; text-wrap: pretty; }
+.bili-dl-settings-rating { min-height: 34px; text-align: left; font-size: 12px; }
 
 .bili-dl-settings-error {
   margin: 0 0 4px;
@@ -2038,6 +2084,9 @@
 }
 
 .bili-dl-settings-foot {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
   flex: 0 0 auto;
   margin-left: auto;
 }

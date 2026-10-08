@@ -6,7 +6,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'bilibili-downloader-firefox.xpi')
 # Firefox 商店版本可独立于 Chromium manifest.json 递增。
-FIREFOX_RELEASE_VERSION = '1.2.4'
+FIREFOX_RELEASE_VERSION = '1.2.6'
 
 INCLUDE = {
     'background.js',
