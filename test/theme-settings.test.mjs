@@ -28,9 +28,11 @@ assert.match(settingsCss, /data-theme-kind="ambient"/);
 assert.doesNotMatch(settingsCss, /data-theme="tokyo-love"/);
 
 const themeIds = themesJson.themes.map((theme) => theme.id);
-assert.equal(themeIds.length, 9);
-for (const id of ['cyan-mist', 'violet-haze', 'ember', 'bronze-smoke', 'deep-ocean', 'obsidian', 'tokyo-love', 'manchester-sea', 'chinese-odyssey']) {
+assert.equal(themesJson.version, 4);
+assert.equal(themeIds.length, 8);
+for (const id of ['obsidian', 'deep-ocean', 'mist-cyan', 'pine-mist', 'night-purple', 'dark-crimson', 'ember-orange', 'copper-smoke']) {
   assert.ok(themeIds.includes(id), `missing theme ${id}`);
+  assert.equal(themesJson.themes.find((theme) => theme.id === id).mode, 'dark');
 }
 
 const vars = {};
@@ -76,7 +78,7 @@ await Theme.loadThemes();
 const entries = Theme.listEntries();
 assert.equal(entries[0][0], 'bilibili');
 assert.equal(entries[0][1], '默认');
-assert.equal(entries.length, 10);
+assert.equal(entries.length, 9);
 
 entries.forEach(([id, label]) => {
   themeOptions.push({
@@ -95,12 +97,13 @@ assert.equal(applyTheme('unknown'), 'bilibili');
 assert.equal(themedPanel.dataset.theme, 'bilibili');
 assert.equal(themedPanel.dataset.themeKind, undefined);
 
-assert.equal(applyTheme('tokyo-love'), 'tokyo-love');
-assert.equal(themedPanel.dataset.theme, 'tokyo-love');
+assert.equal(applyTheme('obsidian'), 'obsidian');
+assert.equal(themedPanel.dataset.theme, 'obsidian');
 assert.equal(themedPanel.dataset.themeKind, 'ambient');
 
-applyTheme('cyan-mist');
-assert.equal(themedPanel.dataset.theme, 'cyan-mist');
+assert.equal(applyTheme('cyan-mist'), 'mist-cyan');
+applyTheme('mist-cyan');
+assert.equal(themedPanel.dataset.theme, 'mist-cyan');
 assert.ok(vars['--theme-gradient-background']);
 assert.ok(vars['--bg']);
 

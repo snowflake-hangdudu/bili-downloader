@@ -6,14 +6,14 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'bilibili-downloader-firefox.xpi')
 # Firefox 商店版本可独立于 Chromium manifest.json 递增。
-FIREFOX_RELEASE_VERSION = '1.2.6'
+FIREFOX_RELEASE_VERSION = '1.2.8'
 
 INCLUDE = {
     'background.js',
     '_locales/zh_CN/messages.json', '_locales/en/messages.json',
     'content/page-agent.js', 'content/content.js', 'content/content.css',
     'shared/design-system.css', 'shared/ambient-themes.css', 'shared/theme-manager.js',
-    'shared/themes-ambient-full.json', 'shared/i18n.js', 'shared/i18n-extra.js', 'shared/filename.js', 'shared/download-settings.js',
+    'shared/themes-ambient-full.json', 'shared/i18n-languages.js', 'shared/i18n.js', 'shared/i18n-extra.js', 'shared/i18n-ja-ko.js', 'shared/filename.js', 'shared/download-settings.js',
     'popup/popup.html', 'popup/popup.js', 'popup/popup.css',
     'lib/mp4-remux.iife.js', 'lib/m4s-mux.js', 'lib/m4s-mux-worker.js',
     'icons/icon128.png', 'icons/icon48.png', 'icons/icon32.png', 'icons/icon16.png',

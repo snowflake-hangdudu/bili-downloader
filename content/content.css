@@ -23,10 +23,12 @@
   --brand-cta: linear-gradient(135deg, #009ddb, #0074da);
 
   position: fixed;
-  /* 默认靠右；手动拖拽后的 left/top 位置由脚本恢复。 */
+  /* 默认按窗口比例靠右下；手动拖拽后的 left/top 由脚本恢复。 */
   left: auto;
-  right: 24px;
-  bottom: 120px;
+  right: max(16px, 3vw);
+  bottom: max(16px, 4vh);
+  width: 64px;
+  height: 64px;
   z-index: 999999;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 13px;
@@ -81,9 +83,16 @@
 .bili-dl-list-body { width: 100%; box-sizing: border-box; padding: 14px 16px 8px; background: var(--bdl-bg); }
 .bili-dl-list-download-kind-row { margin: 0 0 12px; }
 .bili-dl-list-download-kind { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.bili-dl-list-download-kind button { min-width: 0; height: 31px; padding: 0 7px; border: 1px solid var(--bdl-border); border-radius: 7px; background: var(--bdl-surface); color: var(--bdl-text-muted); font: inherit; font-size: 11px; font-weight: 500; white-space: nowrap; cursor: pointer; }
-.bili-dl-list-download-kind button:hover { border-color: var(--bdl-accent-border); color: var(--bdl-accent-strong); background: var(--bdl-accent-soft); }
-.bili-dl-list-download-kind button.active { border-color: var(--bdl-accent); background: var(--bdl-accent-soft); color: var(--bdl-accent-strong); font-weight: 650; }
+.bili-dl-list-download-kind label { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--bdl-border); border-radius: 8px; background: var(--bdl-surface); color: var(--bdl-text-muted); cursor: pointer; font-size: 12px; line-height: 1.2; transition: background .15s, border-color .15s, color .15s; }
+.bili-dl-list-download-kind label:hover:not(:has(input:disabled)) { border-color: var(--bdl-accent-border); color: var(--bdl-accent-strong); }
+.bili-dl-list-download-kind label:has(input:checked) { border-color: var(--bdl-accent-border); color: var(--bdl-accent-strong); background: var(--bdl-accent-soft); font-weight: 600; }
+.bili-dl-list-download-kind input { appearance: none; -webkit-appearance: none; position: relative; flex: 0 0 15px; width: 15px; height: 15px; box-sizing: border-box; margin: 0; border: 1px solid var(--bdl-border); border-radius: 4px; background: var(--bdl-bg); cursor: inherit; }
+.bili-dl-list-download-kind input:checked { border-color: var(--bdl-accent); background: var(--bdl-accent); }
+.bili-dl-list-download-kind input:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 7px; border: solid var(--bdl-accent-contrast); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.bili-dl-list-download-kind label:has(input:focus-visible) { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
+.bili-dl-list-download-kind input:focus-visible { outline: none; }
+.bili-dl-list-download-kind label:has(input:disabled) { opacity: .6; cursor: default; }
+@media (forced-colors: active) { .bili-dl-list-download-kind input { appearance: auto; -webkit-appearance: auto; } .bili-dl-list-download-kind input:checked::after { content: none; } }
 .bili-dl-list-tools { display: flex; gap: 8px; margin-bottom: 10px; }
 .bili-dl-list-tools input { min-width: 0; flex: 1; height: 32px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--bdl-border); border-radius: var(--bdl-radius); background: var(--bdl-surface); color: var(--bdl-text); font: inherit; font-size: 12px; }
 .bili-dl-list-tools input:focus { outline: 2px solid var(--bdl-accent-soft); border-color: var(--bdl-accent); }
@@ -205,8 +214,7 @@
 }
 
 @media (max-width: 420px) {
-  #bili-dl-panel { left: 8px; right: auto; bottom: 86px; }
-  #bili-dl-menu { width: calc(100vw - 16px); max-width: none; }
+  #bili-dl-menu { max-width: calc(100vw - 32px); }
   .bili-dl-mode-tabs, .bili-dl-list-body, .bili-dl-body { padding-left: 12px; padding-right: 12px; }
   .bili-dl-list-tools { flex-wrap: wrap; }
   .bili-dl-list-tools input { min-width: 180px; }
@@ -1333,6 +1341,25 @@
   cursor: wait;
 }
 
+.bili-dl-space-profile .bili-dl-list-refresh-page {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 110px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--bdl-accent-border);
+  border-radius: 7px;
+  background: var(--bdl-accent-soft);
+  color: var(--bdl-accent-strong);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.bili-dl-space-profile .bili-dl-list-refresh-page:hover:not(:disabled) { border-color: var(--bdl-accent); }
+.bili-dl-space-profile .bili-dl-list-refresh-page:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 2px; }
+
 .bili-dl-footer {
   display: flex;
   /* 固定高度面板的剩余空间留在内容与导航之间。 */
@@ -1481,17 +1508,17 @@
   box-sizing: border-box;
   min-height: 84px;
   padding: 12px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--bdl-border);
   border-radius: 8px;
-  background: #fff;
-  color: inherit;
+  background: var(--bdl-surface);
+  color: var(--bdl-text);
   text-decoration: none;
   transition: border-color .16s ease, background .16s ease;
 }
 
 .bili-dl-plugin-row:hover {
-  border-color: #9ddcfa;
-  background: #f7fbff;
+  border-color: var(--bdl-accent-border);
+  background: var(--bdl-accent-soft);
   box-shadow: none;
   transform: none;
 }
@@ -1508,7 +1535,7 @@
   flex: 0 0 auto;
   border-radius: 8px;
   overflow: hidden;
-  background: #eef2f6;
+  background: var(--bdl-bg);
 }
 
 .bili-dl-plugin-icon-fallback {
@@ -1517,11 +1544,11 @@
   height: 100%;
   align-items: center;
   justify-content: center;
-  color: #5f6b7a;
+  color: var(--bdl-text-muted);
   font-size: 16px;
   font-weight: 700;
   line-height: 1;
-  background: linear-gradient(145deg, #eef2f6, #e2e8f0);
+  background: var(--bdl-bg);
 }
 
 .bili-dl-plugin-icon-wrap.is-fallback .bili-dl-plugin-icon-fallback {
@@ -1534,7 +1561,7 @@
   height: 44px;
   border-radius: 8px;
   object-fit: cover;
-  background: #f3f4f6;
+  background: var(--bdl-bg);
 }
 
 .bili-dl-plugin-copy {
@@ -1554,7 +1581,7 @@
 }
 
 .bili-dl-plugin-copy > span {
-  color: #747c89;
+  color: var(--bdl-text-muted);
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
@@ -1619,8 +1646,8 @@
   margin-top: 0;
 }
 
-/* 相关插件、诊断日志、任务中心保留代码入口，底栏不展示；远程配置不能重新显示。 */
-.bili-dl-footer-links [data-sheet="plugins"],
+/* 公告、诊断日志、任务中心不在底栏展示。相关插件在目录为空时由脚本隐藏。 */
+.bili-dl-footer-links [data-sheet="notice"],
 .bili-dl-footer-links [data-sheet="diagnostics"],
 .bili-dl-footer-links [data-sheet="tasks"] {
   display: none !important;
@@ -2134,18 +2161,22 @@
 .bili-dl-notice-plan-label {
   margin: 0 0 7px;
   color: var(--bdl-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .bili-dl-notice-list {
   margin: 0;
   padding-left: 18px;
-  color: var(--bdl-text-muted);
+  color: var(--bdl-text-secondary, var(--bdl-text));
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .bili-dl-notice-list li + li {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .bili-dl-notice-plan + .bili-dl-notice-plan {

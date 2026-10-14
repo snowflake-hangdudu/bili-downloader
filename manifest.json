@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.2.6",
+  "version": "1.2.8",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage", "downloads", "clipboardWrite"],
   "host_permissions": [
@@ -42,8 +42,10 @@
         "shared/filename.js",
         "shared/download-settings.js",
         "shared/theme-manager.js",
+        "shared/i18n-languages.js",
         "shared/i18n.js",
         "shared/i18n-extra.js",
+        "shared/i18n-ja-ko.js",
         "content/content.js"
       ],
       "css": ["content/content.css", "shared/design-system.css", "shared/ambient-themes.css"],

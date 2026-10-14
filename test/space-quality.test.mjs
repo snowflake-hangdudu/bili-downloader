@@ -40,11 +40,12 @@ assert.match(js, /listQueueLayout = queueRunning && operationMode === 'list' && 
 assert.match(js, /if \(!el \|\| job\.cancelRequested \|\| queueCancelled\) return;/);
 assert.match(js, /async function ensureListItemVideoIds\(item\)/);
 assert.match(js, /item\.aid = String\(resolved\.info\.aid/);
-assert.doesNotMatch(css, /\.bili-dl-footer-links \[data-sheet="notice"\]/);
-assert.match(css, /\.bili-dl-footer-links \[data-sheet="plugins"\][\s\S]*display:\s*none/);
+assert.match(css, /\.bili-dl-footer-links \[data-sheet="notice"\][\s\S]*display:\s*none/);
+assert.doesNotMatch(css, /\.bili-dl-footer-links \[data-sheet="plugins"\][\s\S]*display:\s*none/);
 assert.match(css, /\.bili-dl-footer-links \[data-sheet="diagnostics"\][\s\S]*display:\s*none/);
 assert.match(css, /\.bili-dl-footer-links \[data-sheet="tasks"\][\s\S]*display:\s*none/);
-assert.match(js, /const HIDDEN_FOOTER_SHEETS = new Set\(\['plugins', 'diagnostics', 'tasks'\]\)/);
+assert.match(js, /const HIDDEN_FOOTER_SHEETS = new Set\(\['diagnostics', 'tasks', 'notice'\]\)/);
+assert.match(js, /sheet === 'plugins'/);
 assert.match(js, /notice: \{ enabled: true/);
 assert.match(js, /const REMOTE_CONTENT_DEBUG_REFRESH = false;/);
 

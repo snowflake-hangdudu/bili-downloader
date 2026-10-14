@@ -75,6 +75,7 @@ body[data-theme-kind="ambient"] .popup-header > * {
 #bili-dl-panel[data-theme-kind="ambient"] .bili-dl-job-panel,
 #bili-dl-panel[data-theme-kind="ambient"] .bili-dl-space-profile,
 #bili-dl-panel[data-theme-kind="ambient"] .bili-dl-notice-section,
+#bili-dl-panel[data-theme-kind="ambient"] .bili-dl-plugin-row,
 body[data-theme-kind="ambient"] .popup-video-card {
   backdrop-filter: blur(var(--theme-surface-blur, 14px));
   -webkit-backdrop-filter: blur(var(--theme-surface-blur, 14px));

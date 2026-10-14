@@ -14,6 +14,19 @@ function isBilibiliSender(sender) {
   }
 }
 
+// Register before creating downloads: filename determination can run before
+// downloads.download resolves with its ID. Match each unique download URL.
+const pendingMediaFilenames = new Map();
+chrome.downloads.onDeterminingFilename?.addListener((item, suggest) => {
+  const expected = pendingMediaFilenames.get(item.url);
+  if (!expected || item.byExtensionId !== chrome.runtime.id) {
+    suggest();
+    return;
+  }
+  pendingMediaFilenames.delete(item.url);
+  suggest({ filename: expected.filename, conflictAction: 'uniquify' });
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (['BILI_DL_SAVE_MEDIA', 'BILI_DL_MEDIA_STATE', 'BILI_DL_CANCEL_MEDIA'].includes(msg?.type)) {
     (async () => {
@@ -24,7 +37,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (url.protocol !== 'blob:' || url.origin !== senderUrl.origin) throw new Error('无效的媒体地址');
         const filename = String(msg.filename || '');
         if (!filename || /[\\/\x00-\x1f]/.test(filename) || !/\.(mp4|m4a)$/.test(filename)) throw new Error('无效的文件名');
-        const downloadId = await chrome.downloads.download({ url: url.href, filename, saveAs: false, conflictAction: 'uniquify' });
+        for (const [key, entry] of pendingMediaFilenames) {
+          if (Date.now() - entry.at > 600000) pendingMediaFilenames.delete(key);
+        }
+        pendingMediaFilenames.set(url.href, { filename, at: Date.now() });
+        let downloadId;
+        try {
+          downloadId = await chrome.downloads.download({ url: url.href, filename, saveAs: false, conflictAction: 'uniquify' });
+        } catch (error) {
+          pendingMediaFilenames.delete(url.href);
+          throw error;
+        }
         return { ok: true, downloadId };
       }
       if (!Number.isInteger(msg.downloadId)) throw new Error('无效的下载编号');
@@ -32,7 +55,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       // Re-check ownership after service-worker restarts; never expose other downloads.
       if (!item || item.byExtensionId !== chrome.runtime.id) throw new Error('下载记录不可用，请打开浏览器下载记录检查');
       if (msg.type === 'BILI_DL_CANCEL_MEDIA' && item.state === 'in_progress') await chrome.downloads.cancel(item.id);
-      return { ok: true, state: item.state, error: item.error || '', bytesReceived: item.bytesReceived || 0 };
+      if (msg.type === 'BILI_DL_CANCEL_MEDIA' || item.state === 'complete' || item.state === 'interrupted') pendingMediaFilenames.delete(item.url);
+      return { ok: true, state: item.state, error: item.error || '', bytesReceived: item.bytesReceived || 0,
+        actualFilename: String(item.filename || '').split(/[\\/]/).pop() || '' };
     })().then(sendResponse, (error) => sendResponse({ ok: false, error: String(error.message || error) }));
     return true;
   }
@@ -45,8 +70,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === 'BILI_DL_DOWNLOAD_COVER') {
+    if (!isBilibiliSender(_sender)) {
+      sendResponse({ ok: false, error: '不允许的下载请求' });
+      return;
+    }
     const sourceUrl = String(msg.url || '').trim();
     const filename = String(msg.filename || 'bilibili-cover.jpg');
+    if (!filename || /[\\/\x00-\x1f]/.test(filename) || !/\.(jpe?g|png|webp)$/i.test(filename)) {
+      sendResponse({ ok: false, error: '无效的文件名' });
+      return;
+    }
     const url = sourceUrl.replace(/^http:\/\//i, 'https://');
     if (!/^https:\/\/(?:[^/]+\.)?hdslb\.com\//i.test(url)) {
       console.warn('[BiliDL] 封面下载拒绝：地址不在 hdslb.com 白名单', { sourceUrl, normalizedUrl: url });
@@ -54,9 +87,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return;
     }
     console.info('[BiliDL] 封面下载请求', { filename, sourceUrl, url });
-    chrome.downloads.download({ url, filename, saveAs: false }, (downloadId) => {
+    // A fragment does not change the CDN resource, but distinguishes concurrent
+    // downloads of the same cover when their template metadata differs.
+    const downloadUrl = new URL(url);
+    downloadUrl.hash = `bili-dl-cover-${crypto.randomUUID()}`;
+    for (const [key, entry] of pendingMediaFilenames) {
+      if (Date.now() - entry.at > 600000) pendingMediaFilenames.delete(key);
+    }
+    pendingMediaFilenames.set(downloadUrl.href, { filename, at: Date.now() });
+    chrome.downloads.download({ url: downloadUrl.href, filename, saveAs: false, conflictAction: 'uniquify' }, (downloadId) => {
       const error = chrome.runtime.lastError;
       if (error) {
+        pendingMediaFilenames.delete(downloadUrl.href);
         console.error('[BiliDL] 封面下载启动失败', error.message || error);
         sendResponse({ ok: false, error: error.message || '封面下载失败' });
       } else {
@@ -75,7 +117,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse({ ok: false, error: '不允许的图标地址' });
       return;
     }
-    fetch(url, { cache: 'force-cache', credentials: 'omit' })
+    fetch(url, { cache: msg.refresh === true ? 'no-store' : 'no-cache', credentials: 'omit' })
       .then(async (response) => {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const mime = String(response.headers.get('content-type') || '').split(';', 1)[0].toLowerCase();
@@ -98,8 +140,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const url = String(msg.url || '');
   const publicConfigUrls = new Set([
     'http://124.222.62.190:8081/api/config/bilibili',
-    'http://124.222.62.190:8081/api/feature-flags',
-    'http://124.222.62.190:8081/api/plugins'
+    'http://124.222.62.190:8081/api/plugins/bilibili'
   ]);
   if (!publicConfigUrls.has(url)) {
     console.warn('[BiliDL] 配置请求拒绝：地址不在白名单', url);

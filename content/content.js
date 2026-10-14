@@ -24,10 +24,9 @@
   const PRIVACY_URL = 'https://snowflake-hangdudu.github.io/bili-downloader/';
   const CONFIG_BASE_URL = 'http://124.222.62.190:8081';
   const CONTENT_JSON_URL = `${CONFIG_BASE_URL}/api/config/bilibili`;
-  const FEATURE_FLAGS_URL = `${CONFIG_BASE_URL}/api/feature-flags`;
-  const PLUGINS_JSON_URL = `${CONFIG_BASE_URL}/api/plugins`;
+  const PLUGINS_JSON_URL = `${CONFIG_BASE_URL}/api/plugins/bilibili`;
   const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
-  const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v2';
+  const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v3';
   const FEEDBACK_EMAIL = 'hangdudu0@agent.qq.com';
   const DOWNLOAD_PREFS_KEY = 'biliDlDownloadPrefs_v1';
   const THEME_PREF_KEY = 'biliDlTheme_v1';
@@ -126,7 +125,7 @@
   const CONTENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
   // @pack:remote-debug-refresh -- release packers replace true with false.
   const REMOTE_CATALOG_DEBUG_REFRESH = true;
-  const REMOTE_CONTENT_DEBUG_REFRESH = false;
+  const REMOTE_CONTENT_DEBUG_REFRESH = true;
   const DEFAULT_REMOTE_CONTENT = {
     notice: { enabled: true, title: '公告', updated: '', body: '暂未获取到最新公告，请稍后再试。\n\n下载功能不受影响。' },
     coop: { enabled: true, title: '开发合作', updated: '', body: '接浏览器插件定制开发。\n\n有合作意向请联系 QQ：748604487\n邮箱：hangdudu0@agent.qq.com\n请备注「插件开发」，并简单说明需求。' },
@@ -266,6 +265,10 @@
         });
         return;
       }
+      if (data.type === 'ACTIVITY') {
+        armStallWatchdog();
+        return;
+      }
       if (data.type === 'DONE') {
         finishMergeWorkerJob(job, { blob: data.blob });
         return;
@@ -384,7 +387,7 @@
       } finally {
         link.remove();
         // The browser needs a short turn to attach the local Blob to its save.
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
       }
     }
     let downloadId;
@@ -408,6 +411,7 @@
         let base = Array.from(title).slice(0, 60).join('').replace(/[. ]+$/g, '') || 'bilibili-video';
         if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base)) base = `_${base}`;
         filename = `${base}.${extension}`;
+        console.warn('[BiliDL] 文件名被拒绝，改用标题保存', filename);
         started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
       }
       if (!started?.ok) throw new Error(started?.error || '无法创建浏览器下载');
@@ -421,7 +425,10 @@
         }
         const result = await EXT.runtime.sendMessage({ type: 'BILI_DL_MEDIA_STATE', downloadId });
         if (!result?.ok) throw new Error(result?.error || '无法确认保存结果，请检查浏览器下载记录');
-        if (result.state === 'complete') return downloadId;
+        if (result.state === 'complete') {
+          debugLog('保存', `完成 ${downloadId}：${result.actualFilename || filename}`);
+          return downloadId;
+        }
         if (result.state === 'interrupted') throw new Error('浏览器保存失败：' + (result.error || '下载中断'));
         if (Number(result.bytesReceived || 0) !== lastBytes) {
           lastBytes = Number(result.bytesReceived || 0);
@@ -471,7 +478,12 @@
   let qualities = [];
   let selectedQn = 0;
   let selectedFormat = 'mp4'; // 'mp4' | 'm4a'
-  let listDownloadKind = 'video'; // video | audio | both
+  function listContentParts(kind) {
+    const legacy = kind === 'both' ? 'video+audio' : kind;
+    const parts = String(legacy || '').split('+');
+    return ['video', 'audio', 'cover'].filter((part) => parts.includes(part));
+  }
+  let listDownloadKind = 'video'; // Canonical combination: video+audio+cover (legacy both supported).
   let qualityStrategy = 'exact'; // exact | highest
   // Selects among Bilibili's existing streams of the same resolution; never re-encodes.
   const streamPreference = 'high-bitrate';
@@ -489,6 +501,8 @@
 
   const HISTORY_KEY = 'biliDlHistory';
   const HISTORY_MAX = 50;
+  // Serialize read-modify-write operations within this page.
+  let historyWriteQueue = Promise.resolve();
 
   function sameHistoryPart(a, b) {
     if (a?.cid && b?.cid) return a.cid === b.cid;
@@ -526,7 +540,14 @@
     }
   }
 
-  async function addHistory(entry) {
+  function addHistory(entry) {
+    const write = historyWriteQueue.then(() => writeHistoryEntry(entry));
+    // A failed write must not prevent subsequent entries from being saved.
+    historyWriteQueue = write.catch(() => null);
+    return write;
+  }
+
+  async function writeHistoryEntry(entry) {
     try {
       const items = await loadHistory();
       const fmt = entry.format === 'm4a' ? 'm4a' : 'mp4';
@@ -735,9 +756,9 @@
             <div id="bili-dl-list-download-kind-row" class="bili-dl-list-download-kind-row" role="group" data-i18n-aria="listDownloadKind" aria-label="列表下载内容">
               <div class="bili-dl-section-head" data-i18n="listDownloadKind">下载内容</div>
               <div id="bili-dl-list-download-kind" class="bili-dl-list-download-kind">
-                <button type="button" class="active" data-list-download-kind="video" data-i18n="videoOnly">仅视频</button>
-                <button type="button" data-list-download-kind="audio" data-i18n="audioOnly">仅音频</button>
-                <button type="button" data-list-download-kind="both" data-i18n="videoAndAudio">视频+音频</button>
+                <label><input type="checkbox" data-list-content="video" checked><span data-i18n="listContentVideo">视频</span></label>
+                <label><input type="checkbox" data-list-content="audio"><span data-i18n="listContentAudio">音频</span></label>
+                <label><input type="checkbox" data-list-content="cover"><span data-i18n="listContentCover">封面</span></label>
               </div>
             </div>
             <label class="bili-dl-stream-preference-row"><span data-i18n="streamPreference">视频质量</span>
@@ -749,7 +770,7 @@
             <div class="bili-dl-list-tools" role="search">
               <input id="bili-dl-list-search" type="search" maxlength="80" data-i18n-placeholder="listSearchPlaceholder" data-i18n-aria="listSearchPlaceholder" placeholder="搜索已加载视频标题" aria-label="搜索已加载视频标题">
               <div class="bili-dl-list-filter" role="group" data-i18n-aria="listFilter" aria-label="列表筛选">
-                <button id="bili-dl-list-refresh-page" type="button" class="bili-dl-list-refresh-page hidden" data-i18n="refreshCurrentPage" data-i18n-title="refreshCurrentPageTitle" title="只读取 B 站当前页显示的投稿">刷新当前页</button>
+                <button id="bili-dl-list-refresh-page" type="button" class="bili-dl-list-refresh-page hidden" data-i18n="refreshCurrentPage" data-i18n-title="refreshCurrentPageTitle" title="重新读取当前页的视频列表">刷新列表</button>
                 <span id="bili-dl-list-filter-sep" class="bili-dl-list-filter-sep hidden" aria-hidden="true">|</span>
                 <button type="button" data-list-filter="all" class="active" data-i18n="filterAll">全部</button>
                 <button type="button" data-list-filter="selected" data-i18n="filterSelected">已选</button>
@@ -790,23 +811,23 @@
             </div>
           </div>
           <div class="bili-dl-footer">
+            <button type="button" class="bili-dl-footer-action" data-sheet="settings" data-i18n-title="settings" title="设置">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+              <span data-i18n="settings">设置</span>
+            </button>
             <div class="bili-dl-footer-links">
               <button type="button" class="bili-dl-footer-link bili-dl-footer-plugins" data-sheet="plugins" data-i18n-title="relatedPlugins" title="相关插件">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                 <span data-i18n="relatedPlugins">相关插件</span>
               </button>
-              <button type="button" class="bili-dl-footer-link bili-dl-footer-notice" data-sheet="notice" data-i18n-title="notice" title="公告">
+              <button type="button" class="bili-dl-footer-link bili-dl-footer-coop" data-sheet="coop" data-i18n-title="coopDefaultTitle" title="开发合作">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h1l6 4V6L5 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg>
-                <span data-i18n="notice">公告</span>
+                <span data-i18n="coopDefaultTitle">开发合作</span>
               </button>
               <button type="button" class="bili-dl-footer-link" data-sheet="diagnostics" data-i18n="diagnostics">诊断日志</button>
               <button type="button" class="bili-dl-footer-link" data-sheet="tasks" data-i18n="tasks">任务中心</button>
             </div>
             <div class="bili-dl-footer-meta">
-              <button type="button" class="bili-dl-footer-action" data-sheet="settings" data-i18n-title="settings" title="设置">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
-                <span data-i18n="settings">设置</span>
-              </button>
               <button type="button" class="bili-dl-footer-action" data-sheet="donate" data-i18n-title="donateTitle" title="自愿赞赏">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg>
                 <span data-i18n="donate">赞赏</span>
@@ -1063,9 +1084,23 @@
     function loadPluginIcon(iconUrl) {
       if (!iconUrl) return Promise.resolve('');
       if (!pluginIconLoadCache.has(iconUrl)) {
-        const request = EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_ASSET', url: iconUrl })
-          .then((response) => response?.ok && typeof response.dataUrl === 'string' ? response.dataUrl : '')
-          .catch(() => '');
+        const forgetFailedRequest = () => {
+          // An earlier request must not remove a newer entry after a refresh.
+          if (pluginIconLoadCache.get(iconUrl) === request) pluginIconLoadCache.delete(iconUrl);
+        };
+        const request = EXT.runtime.sendMessage({
+          type: 'BILI_DL_FETCH_ASSET', url: iconUrl,
+          refresh: REMOTE_CATALOG_DEBUG_REFRESH
+        }).then((response) => {
+          if (!response?.ok || typeof response.dataUrl !== 'string' || !response.dataUrl) {
+            throw new Error(response?.error || '图标返回内容为空');
+          }
+          return response.dataUrl;
+        }).catch((error) => {
+          forgetFailedRequest();
+          debugLog('相关插件', `图标加载失败，下次打开将重试：${iconUrl} · ${error?.message || error}`);
+          return '';
+        });
         pluginIconLoadCache.set(iconUrl, request);
       }
       return pluginIconLoadCache.get(iconUrl);
@@ -1085,13 +1120,17 @@
       if (btn) btn.textContent = t('ratingGoStore', { store: label });
     }
     function ratingMinSuccess() { const n = Number(remoteContent.rating?.minSuccess); return n > 0 ? n : STORE_RATING_MIN_SUCCESS; }
-    const HIDDEN_FOOTER_SHEETS = new Set(['plugins', 'diagnostics', 'tasks']);
+    const HIDDEN_FOOTER_SHEETS = new Set(['diagnostics', 'tasks', 'notice']);
 
     function applyRemoteButtons() {
       panel.querySelectorAll('[data-sheet]').forEach((btn) => {
         const sheet = btn.dataset.sheet;
         if (HIDDEN_FOOTER_SHEETS.has(sheet)) {
           btn.classList.add('hidden');
+          return;
+        }
+        if (sheet === 'plugins') {
+          btn.classList.toggle('hidden', pluginCatalogLoaded && relatedPlugins.length === 0);
           return;
         }
         const item = remoteContent[sheet];
@@ -1107,25 +1146,23 @@
     }
 
     function getCachedPluginCatalog(record) {
-      const flags = record?.data?.flags;
-      const plugins = record?.data?.plugins;
-      if (!flags || typeof flags !== 'object' || Array.isArray(flags) || !Array.isArray(plugins)) return null;
-      return { data: { flags, plugins }, fetchedAt: Number(record.fetchedAt) || 0 };
+      const data = record?.data;
+      const related = data?.relatedPlugins;
+      if (data?.id !== 'bilibili' || typeof related?.enabled !== 'boolean' ||
+          !Array.isArray(related.pluginIds) || !Array.isArray(related.plugins)) return null;
+      return { data, fetchedAt: Number(record.fetchedAt) || 0 };
     }
 
-    function isRelatedPluginsMasterOn(flags) {
-      if (!flags || typeof flags !== 'object') return false;
-      if (flags.relatedPluginsVisible === true) return true;
-      // Stale local cache during migration from bilibiliSeriesVisible.
-      if (flags.relatedPluginsVisible == null && flags.bilibiliSeriesVisible === true) return true;
-      return false;
+    function isRelatedPluginsMasterOn(data) {
+      return data?.relatedPlugins?.enabled === true;
     }
 
-    function normalizeRelatedPlugins(flags, plugins) {
-      // Server should already fold the master switch into each item’s visible
-      // field; keep an explicit flag check as defense-in-depth for stale/mixed data.
-      if (!isRelatedPluginsMasterOn(flags)) return [];
-      return plugins
+    function normalizeRelatedPlugins(data) {
+      if (!isRelatedPluginsMasterOn(data)) return [];
+      const related = data.relatedPlugins;
+      const byId = new Map(related.plugins.filter((plugin) => plugin && typeof plugin === 'object').map((plugin) => [plugin.id, plugin]));
+      // Only selected IDs are shown, in the order saved by this plugin's profile.
+      return [...new Set(related.pluginIds)].map((id) => byId.get(id))
         .filter((plugin) => plugin && plugin.visible === true && plugin.id !== 'bilibili')
         .map((plugin) => ({
           id: String(plugin.id || ''),
@@ -1138,7 +1175,7 @@
     }
 
     function applyPluginCatalog(data) {
-      relatedPlugins = normalizeRelatedPlugins(data.flags, data.plugins);
+      relatedPlugins = normalizeRelatedPlugins(data);
       pluginCatalogLoaded = true;
       applyRemoteButtons();
       return relatedPlugins;
@@ -1151,6 +1188,13 @@
     async function loadPluginCatalogNow() {
       let cached = null;
       try {
+        if (REMOTE_CATALOG_DEBUG_REFRESH) {
+          await EXT.storage.local.remove(['biliDlPluginCatalog_v1', 'biliDlPluginCatalog_v2', PLUGIN_CATALOG_CACHE_KEY]);
+          relatedPlugins = [];
+          pluginCatalogLoaded = true;
+          applyRemoteButtons();
+          debugLog('相关插件', '本地开发：已删除旧目录缓存，本次仅使用接口响应');
+        } else {
         const stored = await EXT.storage.local.get(PLUGIN_CATALOG_CACHE_KEY);
         cached = getCachedPluginCatalog(stored[PLUGIN_CATALOG_CACHE_KEY]);
         if (!REMOTE_CATALOG_DEBUG_REFRESH && cached?.fetchedAt && Date.now() - cached.fetchedAt < CONTENT_CACHE_TTL_MS) {
@@ -1161,23 +1205,24 @@
         if (REMOTE_CATALOG_DEBUG_REFRESH) debugLog('相关插件', '调试模式：忽略本地缓存并立即刷新插件目录');
         else if (cached) debugLog('相关插件', cached.fetchedAt ? '12 小时缓存已过期，准备请求插件目录' : '旧版插件缓存无时间信息，准备请求接口');
         else debugLog('相关插件', '无插件目录缓存，准备请求接口');
+        }
       } catch (error) {
         debugLog('相关插件', `读取插件目录缓存失败，准备请求接口：${error?.message || error}`);
       }
 
       try {
-        const [flagsResp, pluginsResp] = await Promise.all([
-          EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: FEATURE_FLAGS_URL }),
-          EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: PLUGINS_JSON_URL })
-        ]);
-        if (!flagsResp?.ok || !pluginsResp?.ok) throw new Error(flagsResp?.error || pluginsResp?.error || '插件目录接口不可用');
-        const flags = flagsResp.data?.flags;
-        const plugins = pluginsResp.data;
-        if (!flags || typeof flags !== 'object' || Array.isArray(flags) || !Array.isArray(plugins)) throw new Error('插件目录返回格式无效');
-        const data = { flags, plugins };
-        await EXT.storage.local.set({ [PLUGIN_CATALOG_CACHE_KEY]: { data, fetchedAt: Date.now() } });
+        const response = await EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: PLUGINS_JSON_URL });
+        if (!response?.ok) throw new Error(response?.error || '插件目录接口不可用');
+        const record = getCachedPluginCatalog({ data: response.data, fetchedAt: Date.now() });
+        if (!record) throw new Error('插件目录返回格式无效');
+        const data = record.data;
         applyPluginCatalog(data);
-        debugLog('相关插件', `远程目录已加载：总开关 ${isRelatedPluginsMasterOn(flags) ? '开启' : '关闭'}，可展示 ${relatedPlugins.length} 个`);
+        try {
+          if (!REMOTE_CATALOG_DEBUG_REFRESH) await EXT.storage.local.set({ [PLUGIN_CATALOG_CACHE_KEY]: record });
+        } catch (error) {
+          debugLog('相关插件', `目录缓存写入失败：${error?.message || error}`);
+        }
+        debugLog('相关插件', `远程目录已加载：总开关 ${isRelatedPluginsMasterOn(data) ? '开启' : '关闭'}，可展示 ${relatedPlugins.length} 个`);
         return relatedPlugins;
       } catch (error) {
         debugLog('相关插件', `远程目录不可用：${error?.message || error}`);
@@ -1187,7 +1232,7 @@
         debugLog('相关插件', '接口获取失败，已使用过期本地插件目录缓存');
       } else {
         relatedPlugins = [];
-        pluginCatalogLoaded = false;
+        pluginCatalogLoaded = true;
         applyRemoteButtons();
       }
       return relatedPlugins;
@@ -1203,6 +1248,12 @@
     async function loadRemoteContentNow() {
       let cached = null;
       try {
+        if (REMOTE_CONTENT_DEBUG_REFRESH) {
+          await EXT.storage.local.remove(CONTENT_CACHE_KEY);
+          remoteContent = mergeRemoteContent({});
+          applyRemoteButtons();
+          debugLog('配置', '本地开发：已删除旧配置缓存，本次仅使用接口响应');
+        } else {
         const stored = await EXT.storage.local.get(CONTENT_CACHE_KEY);
         cached = getCachedRemoteContent(stored[CONTENT_CACHE_KEY]);
         if (!REMOTE_CONTENT_DEBUG_REFRESH && cached?.fetchedAt && Date.now() - cached.fetchedAt < CONTENT_CACHE_TTL_MS) {
@@ -1214,6 +1265,7 @@
         if (REMOTE_CONTENT_DEBUG_REFRESH) debugLog('配置', '调试模式：忽略本地缓存并立即刷新公告/合作配置');
         else if (cached) debugLog('配置', cached.fetchedAt ? '12 小时缓存已过期，准备请求接口' : '旧版缓存无时间信息，准备请求接口');
         else debugLog('配置', '无本地缓存，准备请求接口');
+        }
       } catch (error) {
         debugLog('配置', `读取本地缓存失败，准备请求接口：${error?.message || error}`);
       }
@@ -1222,7 +1274,13 @@
         const resp = await EXT.runtime.sendMessage({ type: 'BILI_DL_FETCH_JSON', url: CONTENT_JSON_URL });
         if (resp?.ok && resp.data && typeof resp.data === 'object') {
           remoteContent = mergeRemoteContent(resp.data);
-          await EXT.storage.local.set({ [CONTENT_CACHE_KEY]: { data: resp.data, fetchedAt: Date.now() } });
+          if (!REMOTE_CONTENT_DEBUG_REFRESH) {
+            try {
+              await EXT.storage.local.set({ [CONTENT_CACHE_KEY]: { data: resp.data, fetchedAt: Date.now() } });
+            } catch (error) {
+              debugLog('配置', `配置缓存写入失败：${error?.message || error}`);
+            }
+          }
           debugLog('配置', `远程配置已加载：${Object.keys(resp.data).join(', ')}`);
           applyRemoteButtons();
           return remoteContent;
@@ -1439,14 +1497,10 @@
       const storedLanguage = globalThis.BiliDlI18n?.preference?.();
       const languagePicker = createSettingsPicker({
         ariaLabel: t('language'),
-        value: storedLanguage === 'zh-CN' || storedLanguage === 'zh-TW' || storedLanguage === 'en'
+        value: globalThis.BiliDlI18n?.languageOptions?.().some((option) => option.code === storedLanguage)
           ? storedLanguage
           : (globalThis.BiliDlI18n?.language?.() || 'zh-CN'),
-        options: [
-          { value: 'zh-CN', label: t('chinese') },
-          { value: 'zh-TW', label: t('traditionalChinese') },
-          { value: 'en', label: t('english') }
-        ],
+        options: (globalThis.BiliDlI18n?.languageOptions?.() || []).map((option) => ({ value: option.code, label: option.label })),
         onChange: (value) => {
           globalThis.BiliDlI18n?.save?.(value)?.then(() => applyLanguage()).catch(() => {});
         }
@@ -1854,6 +1908,8 @@
             image.className = 'bili-dl-plugin-icon';
             image.alt = '';
             image.addEventListener('error', () => {
+              pluginIconLoadCache.delete(icon);
+              debugLog('相关插件', `图标解码失败，下次打开将重试：${icon}`);
               image.remove();
               iconWrap.classList.add('is-fallback');
             }, { once: true });
@@ -1970,6 +2026,9 @@
       menu.classList.remove('is-page');
     }
     async function openInfoSheet(key) {
+      if (key === 'plugins' && REMOTE_CATALOG_DEBUG_REFRESH) {
+        pluginIconLoadCache.clear();
+      }
       menu.classList.remove('is-entering');
       renderInfoSheet(key, remoteContent[key]);
       homeEl?.classList.add('hidden');
@@ -2161,7 +2220,7 @@
         if (prefs.format === 'mp4' || prefs.format === 'm4a') setFormat(prefs.format);
         if (Number(prefs.qn) > 0) selectedQn = Number(prefs.qn);
         if (prefs.qualityStrategy === 'highest' || prefs.qualityStrategy === 'exact') qualityStrategy = prefs.qualityStrategy;
-        if (['video', 'audio', 'both'].includes(prefs.listDownloadKind)) setListDownloadKind(prefs.listDownloadKind, false);
+        if (typeof prefs.listDownloadKind === 'string') setListDownloadKind(prefs.listDownloadKind, false);
         qualityStrategyEls.forEach((el) => { el.value = qualityStrategy; });
         streamPreferenceEls.forEach((el) => { el.value = streamPreference; });
         syncQualitySelection();
@@ -2349,6 +2408,13 @@
       if (dom.following) appendTextElement(meta, 'span', '', `${dom.following} ${t('spaceFollowingSuffix')}`);
       if (dom.likes) appendTextElement(meta, 'span', '', `${dom.likes} ${t('spaceLikesSuffix')}`);
       appendTextElement(meta, 'span', '', listLoaded ? t('spacePostsCount', { count: listTotal }) : t('spaceReadingPosts'));
+      if (listRefreshPageBtn) {
+        listRefreshPageBtn.classList.remove('hidden');
+        listRefreshPageBtn.textContent = t('refreshCurrentPage');
+        listRefreshPageBtn.title = t('refreshCurrentPageTitle');
+        listRefreshPageBtn.disabled = listLoading || queueRunning || spaceGathering;
+        profile.appendChild(listRefreshPageBtn);
+      }
     }
 
     function setListStatus(text, type = '', options = {}) {
@@ -2375,28 +2441,27 @@
     }
 
     function listDownloadKindLabel(kind = listDownloadKind) {
-      if (kind === 'audio') return t('audioOnly');
-      if (kind === 'both') return t('videoAndAudio');
-      return t('videoOnly');
+      return listContentParts(kind).map((part) => t({ video: 'listContentVideo', audio: 'listContentAudio', cover: 'listContentCover' }[part])).join(' + ') || t('listChooseContent');
     }
 
     function setListDownloadKind(kind, persist = true) {
-      if (!['video', 'audio', 'both'].includes(kind)) return;
-      listDownloadKind = kind;
-      listDownloadKindEl?.querySelectorAll('[data-list-download-kind]').forEach((button) => {
-        const active = button.dataset.listDownloadKind === kind;
-        button.classList.toggle('active', active);
-        button.setAttribute('aria-pressed', String(active));
+      const parts = listContentParts(kind);
+      listDownloadKind = parts.join('+');
+      listDownloadKindEl?.querySelectorAll('[data-list-content]').forEach((input) => {
+        input.checked = parts.includes(input.dataset.listContent);
+        input.disabled = queueRunning || spaceGathering;
       });
-      if (listQualitySection) listQualitySection.classList.toggle('hidden', kind === 'audio');
+      if (listQualitySection) listQualitySection.classList.toggle('hidden', !parts.includes('video'));
       updateListSelection();
       if (persist) saveDownloadPrefs();
     }
 
     function updateListSelection() {
+      if (listRefreshPageBtn) listRefreshPageBtn.disabled = listLoading || queueRunning || spaceGathering;
       const count = selectedListBvids.size;
-      listStartBtn.disabled = !count || queueRunning || spaceGathering;
-      listStartBtn.textContent = count ? t('downloadSelectedCount', { count, kind: listDownloadKindLabel() }) : t('downloadSelectedKind', { kind: listDownloadKindLabel() });
+      listStartBtn.disabled = !count || !listContentParts(listDownloadKind).length || queueRunning || spaceGathering;
+      listDownloadKindEl?.querySelectorAll('[data-list-content]').forEach((input) => { input.disabled = queueRunning || spaceGathering; });
+      listStartBtn.textContent = !listContentParts(listDownloadKind).length ? t('listChooseContent') : count ? t('downloadSelectedCount', { count, kind: listDownloadKindLabel() }) : t('downloadSelectedKind', { kind: listDownloadKindLabel() });
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
       listSelectAllBtn.textContent = allSelected ? t('deselectAll') : t('selectAll');
       listSelectAllBtn.disabled = !listItems.length;
@@ -2404,6 +2469,7 @@
     }
 
     function updateListLoadMore() {
+      if (listRefreshPageBtn) listRefreshPageBtn.disabled = listLoading || queueRunning || spaceGathering;
       const visible = listHasMore || listLoading;
       listLoadMoreBtn.classList.toggle('hidden', !visible);
       listLoadMoreBtn.disabled = listLoading || spaceGathering || !listHasMore;
@@ -2497,6 +2563,7 @@
       const resolved = await agentCall('RESOLVE_VIDEO', { href: `https://www.bilibili.com/video/${item.bvid}`, pageIndex: 0 });
       item.aid = String(resolved.info.aid || item.aid || '');
       item.cid = String(resolved.info.cid || item.cid || '');
+      item.cover = item.cover || resolved.info.pic || '';
       if (!item.aid || !item.cid) throw new Error('无法读取该投稿的视频信息');
       return item;
     }
@@ -3537,6 +3604,10 @@
         return result;
       }
 
+      // Every video entry point (single, multi-P and collection/space batches)
+      // can resolve to DASH even when its quality metadata originally said durl.
+      await setupMuxInPage();
+      if (shouldCancel()) throw new Error('下载已取消');
       const result = await agentCall('START_DOWNLOAD', {
         aid: info.aid,
         cid: info.cid,
@@ -3601,9 +3672,6 @@
 
       (async () => {
         try {
-          if (job.format !== 'm4a' && job.mode === 'dash') {
-            await setupMuxInPage();
-          }
           const result = await runSingleDownload(job.info, {
             qn: job.qn,
             format: job.format,
@@ -3661,14 +3729,12 @@
       return launchVideoTask(captureDownloadJob());
     }
 
-    function coverFilename(title, coverUrl) {
-      const base = String(title || 'bilibili-cover')
-        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
-        .replace(/[. ]+$/g, '')
-        .trim()
-        .slice(0, 120) || 'bilibili-cover';
+    function coverFilename(info, coverUrl, opts = {}) {
+      const safeBase = buildFilenameBase(info, selectedQn, 'cover', {
+        ...opts, qualityLabel: t('listContentCover')
+      });
       const ext = /\.(jpe?g|png|webp)(?:$|[?@])/i.exec(String(coverUrl || ''))?.[1]?.toLowerCase() || 'jpg';
-      return `${base}-封面.${ext === 'jpeg' ? 'jpg' : ext}`;
+      return `${safeBase}.${ext === 'jpeg' ? 'jpg' : ext}`;
     }
 
     function normalizeCoverUrl(value) {
@@ -3684,8 +3750,8 @@
       // 浏览器原生下载没有可供面板同步的封面进度，避免展示不准确的状态行。
       statusEl.classList.add('hidden');
       try {
-        const url = normalizeCoverUrl(videoInfo.pic);
-        const filename = coverFilename(videoInfo.title, videoInfo.pic);
+        const url = normalizeCoverUrl(videoInfo.pic).replace(/@[^?]*(?=\?|$)/, '');
+        const filename = coverFilename(videoInfo, url);
         debugLog('封面', `开始下载：${filename} · ${url}`);
         const response = await EXT.runtime.sendMessage({
           type: 'BILI_DL_DOWNLOAD_COVER',
@@ -3698,6 +3764,41 @@
         debugLog('封面', `下载失败：${err.message || err}`);
       } finally {
         coverDownloadBtn.disabled = !videoInfo?.pic;
+      }
+    }
+
+    async function saveListCover(item, shouldCancel, nameOpts = {}) {
+      if (shouldCancel()) throw new Error('下载已取消');
+      let cover = item.cover || item.pic;
+      if (!cover) {
+        const resolved = await agentCall('RESOLVE_VIDEO', { href: `https://www.bilibili.com/video/${item.bvid}`, pageIndex: 0 });
+        cover = resolved.info?.pic;
+        item.cover = cover || '';
+      }
+      if (!cover) throw new Error(t('listCoverMissing'));
+      if (shouldCancel()) throw new Error('下载已取消');
+      const url = normalizeCoverUrl(cover).replace(/@[^?]*(?=\?|$)/, '');
+      const response = await EXT.runtime.sendMessage({ type: 'BILI_DL_DOWNLOAD_COVER', url, filename: coverFilename(item, url, nameOpts) });
+      if (!response?.ok || !Number.isInteger(response.downloadId)) throw new Error(response?.error || t('listCoverFailed'));
+      let lastBytes = -1;
+      let lastProgressAt = Date.now();
+      for (;;) {
+        if (shouldCancel()) {
+          await EXT.runtime.sendMessage({ type: 'BILI_DL_CANCEL_MEDIA', downloadId: response.downloadId });
+          throw new Error('下载已取消');
+        }
+        const state = await EXT.runtime.sendMessage({ type: 'BILI_DL_MEDIA_STATE', downloadId: response.downloadId });
+        if (!state?.ok) throw new Error(state?.error || t('listCoverFailed'));
+        if (state.state === 'complete') return;
+        if (state.state === 'interrupted') throw new Error(`${t('listCoverFailed')}: ${state.error || ''}`);
+        if (state.bytesReceived !== lastBytes) {
+          lastBytes = state.bytesReceived;
+          lastProgressAt = Date.now();
+        } else if (Date.now() - lastProgressAt > 180000) {
+          await EXT.runtime.sendMessage({ type: 'BILI_DL_CANCEL_MEDIA', downloadId: response.downloadId });
+          throw new Error(t('listCoverFailed'));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
@@ -3865,7 +3966,7 @@
       const items = isRetry
         ? retryTasks.map((entry) => entry.item).filter(Boolean)
         : listItems.filter((item) => selectedListBvids.has(item.bvid));
-      if (!items.length || queueRunning || spaceGathering) return;
+      if (!items.length || queueRunning || spaceGathering || (!isRetry && !listContentParts(listDownloadKind).length)) return;
       if (activeJobs.size > 0) {
         setListStatus(t('listWaitCurrent'), 'error');
         return;
@@ -3878,6 +3979,7 @@
         ? retryTasks[0].downloadKind
         : listDownloadKind;
       queueRunning = true;
+      updateListSelection();
       operationMode = 'list';
       queueCancelled = false;
       queuePaused = false;
@@ -3896,8 +3998,10 @@
           const item = items[index];
           const retryTask = isRetry ? retryTasks[index] : null;
           const downloadKind = retryTask?.downloadKind || queueDownloadKind;
-          const wantsVideo = downloadKind !== 'audio';
-          const wantsAudio = downloadKind !== 'video';
+          const outputs = listContentParts(downloadKind);
+          const wantsVideo = outputs.includes('video');
+          const wantsAudio = outputs.includes('audio');
+          const wantsCover = outputs.includes('cover');
           const outputFormat = wantsVideo ? 'mp4' : 'm4a';
           const contentLabel = listDownloadKindLabel(downloadKind);
           setListStatus(t('listDownloading', { index: index + 1, total: items.length, title: item.title }), '', { progress: true });
@@ -3930,7 +4034,7 @@
             info: item,
             format: outputFormat,
             downloadKind,
-            label: `列表 · ${contentLabel}${downloadKind === 'audio' ? '' : ` · ${getSelectedQualityLabel()}`}`,
+            label: `列表 · ${contentLabel}${wantsVideo ? ` · ${getSelectedQualityLabel()}` : ''}`,
             filenameTemplate,
             filenameBase,
             audioFilenameBase,
@@ -3945,7 +4049,7 @@
           try {
             let qn = Number(retryTask?.requestedQn) || queueQn;
             if (queueCancelled) throw new Error('下载已取消');
-            await ensureListItemVideoIds(item);
+            if (wantsVideo || wantsAudio) await ensureListItemVideoIds(item);
             if (queueCancelled) throw new Error('下载已取消');
             job.info.aid = item.aid;
             job.info.cid = item.cid;
@@ -3968,7 +4072,6 @@
               wasDowngraded = !queueSpaceTier && !requested;
               job.requestedQn = qn;
               actualLabel = actualQuality.label || `${qn}P`;
-              if (actualQuality.mode === 'dash') await setupMuxInPage();
             }
             job.label = `列表 · ${contentLabel}${wantsVideo ? ` · ${actualLabel}` : ''}${wasDowngraded ? '（降级）' : ''}`;
             const labelEl = job.cardEl?.querySelector('.bili-dl-progress-q');
@@ -3979,17 +4082,17 @@
                 qn, format: 'mp4', streamPreference: queueStreamPreference, jobId,
                 filenameBase: job.filenameBase, filenameTemplate: job.filenameTemplate,
                 createdAt: job.createdAt, index: job.index, qualityLabel: actualLabel,
-                reuseAudio: downloadKind === 'both'
+                reuseAudio: wantsAudio
               });
               job.videoSaved = true;
               await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: `视频 · ${actualLabel}`, format: 'mp4', downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '视频已保存，历史记录写入失败：' + error.message));
             }
             if (wantsAudio) {
-              if (downloadKind === 'both') {
+              if (wantsVideo && wantsAudio) {
                 job.label = '列表 · 仅音频';
                 if (labelEl) labelEl.textContent = job.label;
               }
-              const reused = downloadKind === 'both'
+              const reused = wantsVideo && wantsAudio
                 ? await saveReusedAudio(videoResult, job.audioFilenameBase, () => Boolean(activeJobs.get(jobId)?.cancelRequested || queueCancelled), jobId, item.title)
                 : null;
               if (!reused) {
@@ -4001,6 +4104,13 @@
               }
               job.audioSaved = true;
               await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: 0, title: item.title, label: '音频', format: 'm4a', ts: Date.now() }).catch((error) => debugLog('历史', '音频已保存，历史记录写入失败：' + error.message));
+            }
+            if (wantsCover) {
+              await saveListCover(item, () => queueCancelled || job.cancelRequested, {
+                filenameTemplate: job.filenameTemplate, createdAt: job.createdAt,
+                index: job.index, part: job.part, partTitle: job.partTitle
+              });
+              job.coverSaved = true;
             }
             ok++;
             if (wasDowngraded) downgraded++;
@@ -4014,14 +4124,16 @@
             const problem = classifyDownloadError(error);
             if (problem.type === 'cancelled') {
               cancelled++;
-              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: job.videoSaved ? 'audio' : downloadKind, message: '已取消，可重试' });
+              const remaining = outputs.filter((part) => !job[`${part}Saved`]).join('+');
+              if (remaining) failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: remaining, message: '已取消，可重试' });
               setTaskState(job, TASK_STATE.cancelled);
               debugLog('列表', `已取消 ${index + 1}/${items.length}：${item.title}`);
             } else {
               fail++;
               job.error = problem;
               setTaskState(job, TASK_STATE.failed, problem.message);
-              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: job.videoSaved ? 'audio' : downloadKind, title: item.title, message: problem.message });
+              const remaining = outputs.filter((part) => !job[`${part}Saved`]).join('+');
+              failedTasks.push({ item, requestedQn: Number(retryTask?.requestedQn) || queueQn, downloadKind: remaining, title: item.title, message: problem.message });
               debugLog('列表', `失败 ${index + 1}/${items.length}：${item.title} · ${problem.message}`);
             }
           } finally {
@@ -4074,16 +4186,29 @@
 
     function placeMenu() {
       const rect = fabPanel.getBoundingClientRect();
-      const menuWidth = Math.min(408, window.innerWidth - 32);
-      const openLeft = rect.left + menuWidth > window.innerWidth - 8 && rect.left > menuWidth;
-      menu.style.left = openLeft ? 'auto' : '0';
-      menu.style.right = openLeft ? '0' : 'auto';
-      const spaceAbove = rect.top - 12;
-      const maxHeight = Math.max(280, Math.min(650, spaceAbove));
-      menu.style.maxHeight = maxHeight + 'px';
+      const { width, height } = getFabViewport();
+      const margin = 16;
+      const gap = 12;
+      const menuWidth = Math.max(1, Math.min(408, width - margin * 2));
+      const menuLeft = Math.max(margin, Math.min(rect.right - menuWidth, width - margin - menuWidth));
+      const spaceAbove = Math.max(0, rect.top - gap - margin);
+      const spaceBelow = Math.max(0, height - rect.bottom - gap - margin);
+      const openBelow = spaceAbove < 280 && spaceBelow > spaceAbove;
+      const menuHeight = Math.max(1, Math.min(650, openBelow ? spaceBelow : spaceAbove));
+      menu.style.width = menuWidth + 'px';
+      menu.style.left = (menuLeft - rect.left) + 'px';
+      menu.style.right = 'auto';
+      menu.style.top = (openBelow ? FAB_SIZE + gap : -gap - menuHeight) + 'px';
+      menu.style.bottom = 'auto';
+      menu.style.height = menuHeight + 'px';
+      menu.style.maxHeight = menuHeight + 'px';
     }
 
     function openMenuShell() {
+      // Development builds refresh on every open; packaged builds reuse the
+      // persisted 12-hour cache. In-flight requests are shared by both paths.
+      loadPluginCatalog();
+      loadRemoteContent();
       placeMenu();
       menu.classList.remove('hidden');
       menu.classList.remove('is-entering');
@@ -4143,8 +4268,8 @@
     listRefreshPageBtn.onclick = () => refreshSpaceCurrentPage(false);
     listLoadMoreBtn.onclick = () => isSpacePage() ? prepareAllSpaceUploads(listLoadMoreBtn) : loadMoreListItems();
     listRetryFailedBtn.onclick = () => startListDownload(lastListFailures);
-    listDownloadKindEl?.querySelectorAll('[data-list-download-kind]').forEach((button) => {
-      button.onclick = () => setListDownloadKind(button.dataset.listDownloadKind);
+    listDownloadKindEl?.querySelectorAll('[data-list-content]').forEach((input) => {
+      input.onchange = () => setListDownloadKind(Array.from(listDownloadKindEl.querySelectorAll('[data-list-content]:checked')).map((el) => el.dataset.listContent).join('+'));
     });
     listSelectAllBtn.onclick = () => {
       const allSelected = listItems.length > 0 && listItems.every((item) => selectedListBvids.has(item.bvid));
@@ -4221,11 +4346,21 @@
 
     const fabPanel = document.getElementById('bili-dl-panel');
     const FAB_SIZE = 64;
-    const FAB_MARGIN = 8;
+    const FAB_MARGIN = 24;
+    let hasCustomFabPos = false;
+    let preferredFabPos = null;
+
+    function getFabViewport() {
+      return {
+        width: document.documentElement.clientWidth || window.innerWidth,
+        height: window.innerHeight
+      };
+    }
 
     function clampFabPos(left, top) {
-      const maxL = Math.max(FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN);
-      const maxT = Math.max(FAB_MARGIN, window.innerHeight - FAB_SIZE - FAB_MARGIN);
+      const { width, height } = getFabViewport();
+      const maxL = Math.max(FAB_MARGIN, width - FAB_SIZE - FAB_MARGIN);
+      const maxT = Math.max(FAB_MARGIN, height - FAB_SIZE - FAB_MARGIN);
       return {
         left: Math.min(Math.max(left, FAB_MARGIN), maxL),
         top: Math.min(Math.max(top, FAB_MARGIN), maxT)
@@ -4241,6 +4376,15 @@
       return p;
     }
 
+    function applyDefaultFabPos() {
+      fabPanel.style.left = 'auto';
+      fabPanel.style.top = 'auto';
+      fabPanel.style.right = '';
+      fabPanel.style.bottom = '';
+    }
+
+    applyDefaultFabPos();
+
     function onFabPointerMove(e) {
       if (!dragActive || e.pointerId !== dragPointerId) return;
       const dx = e.clientX - dragStartX;
@@ -4249,10 +4393,13 @@
         dragMoved = true;
         toggleDragged = true;
         toggleBtn.classList.add('dragging');
+        fabPanel.style.transition = 'none';
       }
       if (dragMoved) {
+        hasCustomFabPos = true;
         e.preventDefault();
         applyFabPos(dragPanelLeft + dx, dragPanelTop + dy);
+        placeMenu();
       }
     }
 
@@ -4269,6 +4416,7 @@
       if (dragMoved) {
         const r = fabPanel.getBoundingClientRect();
         const p = applyFabPos(r.left, r.top);
+        preferredFabPos = p;
         EXT.storage.local.set({ biliDlFabPos: { ...p, v: 2 } }).catch(() => {});
         placeMenu();
       }
@@ -4294,8 +4442,6 @@
         dragPanelLeft = parseFloat(fabPanel.style.left) || dragPanelLeft;
         dragPanelTop = parseFloat(fabPanel.style.top) || dragPanelTop;
       }
-      fabPanel.style.transition = 'none';
-      applyFabPos(dragPanelLeft, dragPanelTop);
       document.addEventListener('pointermove', onFabPointerMove, true);
       document.addEventListener('pointerup', onFabPointerUp, true);
       document.addEventListener('pointercancel', onFabPointerUp, true);
@@ -4305,7 +4451,10 @@
 
     // 恢复上次拖拽位置；窗口缩放时夹回可视区
     EXT.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
+      if (dragActive || hasCustomFabPos) return;
       if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
+        hasCustomFabPos = true;
+        preferredFabPos = { left: pos.left, top: pos.top };
         applyFabPos(pos.left, pos.top);
       }
       placeMenu();
@@ -4315,11 +4464,15 @@
     window.addEventListener('resize', () => {
       clearTimeout(fabResizeTimer);
       fabResizeTimer = setTimeout(() => {
-        const left = parseFloat(fabPanel.style.left);
-        const top = parseFloat(fabPanel.style.top);
-        if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-        const p = applyFabPos(left, top);
-        EXT.storage.local.set({ biliDlFabPos: { ...p, v: 2 } }).catch(() => {});
+        if (dragActive) return;
+        if (!hasCustomFabPos) {
+          applyDefaultFabPos();
+          placeMenu();
+          return;
+        }
+        if (!preferredFabPos) return;
+        applyFabPos(preferredFabPos.left, preferredFabPos.top);
+        placeMenu();
       }, 100);
     });
 
@@ -4463,6 +4616,15 @@
     };
     // 兜底：站内其他改 URL 方式（location 直接赋值等）
     window.addEventListener('hashchange', onUrlChanged);
+    // Content scripts have an isolated history wrapper: page-world SPA calls can
+    // bypass it, and pushState does not emit popstate. Observe the actual URL too.
+    setInterval(() => {
+      if (!document.hidden) onUrlChanged();
+    }, 500);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) onUrlChanged();
+    });
+    window.addEventListener('focus', onUrlChanged);
 
     function autoOpenPanelSoon() {
       setTimeout(() => {

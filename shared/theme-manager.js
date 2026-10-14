@@ -2,6 +2,12 @@
   'use strict';
 
   const DEFAULT_THEME_ID = 'bilibili';
+  const THEME_ALIASES = {
+    'cyan-mist': 'mist-cyan',
+    'violet-haze': 'night-purple',
+    ember: 'ember-orange',
+    'bronze-smoke': 'copper-smoke'
+  };
   const AMBIENT_VAR_KEYS = [
     '--bg', '--surface', '--surface-hover', '--surface-strong', '--border', '--border-soft',
     '--text-primary', '--text-secondary', '--text-muted',
@@ -61,8 +67,9 @@
   }
 
   function normalizeThemeId(value) {
-    if (value === DEFAULT_THEME_ID) return DEFAULT_THEME_ID;
-    return getTheme(value)?.id || DEFAULT_THEME_ID;
+    const aliased = THEME_ALIASES[value] || value;
+    if (aliased === DEFAULT_THEME_ID) return DEFAULT_THEME_ID;
+    return getTheme(aliased)?.id || DEFAULT_THEME_ID;
   }
 
   function clearAmbientVars(root) {

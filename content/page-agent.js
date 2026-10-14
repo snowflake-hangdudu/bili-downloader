@@ -705,26 +705,18 @@
     })[0] || null;
   }
 
-  async function getStreams(aid, cid, qn, streamPreference = 'high-bitrate') {
-    // 720P 及以下优先 durl：单文件含音视频，无需拆轨合并
-    if (qn <= 64) {
-      try {
-        const durl = await apiGet(
-          `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
-        );
-        if (durl.durl?.length === 1) {
-          const urls = extractDurlUrls(durl.durl[0]);
-          if (urls.length) {
-            log('步骤3', `低清 ${qn}P 使用 durl 单文件 (${(durl.durl[0].size / 1024 / 1024).toFixed(1)}MB)`);
-            return { type: 'durl', urls };
-          }
-          log('步骤3', 'durl 地址不可用，回退 DASH');
-        }
-      } catch (e) {
-        log('步骤3', 'durl 获取失败，回退 DASH: ' + e.message);
-      }
-    }
+  async function getSingleFileStreams(aid, cid, qn) {
+    const data = await apiGet(`/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`);
+    if (data.durl?.length > 1) throw new Error('该片源由多个旧格式片段组成，请切换清晰度后重试');
+    const urls = data.durl?.length === 1 ? extractDurlUrls(data.durl[0]) : [];
+    if (!urls.length) throw new Error('无法获取单文件播放流');
+    if (Number(data.quality) !== Number(qn)) throw new Error('单文件片源画质与请求不符，请切换清晰度后重试');
+    return { type: 'durl', urls };
+  }
 
+  async function getStreams(aid, cid, qn, streamPreference = 'high-bitrate') {
+    // Prefer the same DASH source used by the player, including 720P and below.
+    // Legacy single-file sources can fail even while the DASH source plays.
     try {
       const dash = await apiGet(
         `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=16&fourk=1&platform=pc`
@@ -753,15 +745,7 @@
       log('步骤3', 'DASH 获取失败: ' + e.message);
     }
 
-    const durl = await apiGet(
-      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
-    );
-    if (durl.durl?.length > 1) throw new Error('该片源由多个旧格式片段组成，请切换清晰度后重试');
-    if (durl.durl?.length === 1) {
-      const urls = extractDurlUrls(durl.durl[0]);
-      if (urls.length) return { type: 'durl', urls };
-    }
-    throw new Error('无法获取播放流');
+    return getSingleFileStreams(aid, cid, qn);
   }
 
   function safeFilename(name, fallback) {
@@ -1039,9 +1023,8 @@
       let total = 0;
       const attemptedWorking = new Set();
 
-      // Do not discard a partial file merely because a just-probed mirror is
-      // reset during the full request. Try each remaining candidate once and
-      // use Range to continue from the received byte count.
+      // Resume only on the same URL. Different mirrors can serve different
+      // encodings/box layouts even for the same track and byte length.
       while (true) {
         let working = null;
         try {
@@ -1055,6 +1038,10 @@
             break;
           }
           attemptedWorking.add(working);
+
+          chunks = [];
+          received = 0;
+          total = 0;
 
           rememberMirrorHost(working);
           log('下载', '使用 ' + hostFromUrl(working));
@@ -1162,7 +1149,7 @@
           // All candidates are finite. On a transport failure, keep the partial
           // bytes and let the next candidate resume it with Range.
           if (attemptedWorking.size && !session.paused) {
-            log('下载', '切换 CDN 后继续');
+            log('下载', '切换 CDN 后重新下载该轨道，避免混用片源');
             continue;
           }
           break;
@@ -1271,10 +1258,10 @@
     try {
       if (session.cancelled) throw new Error('下载已取消');
       const base = safeFilename(filenameBase || title, 'video');
-      let streams = await getStreams(aid, cid, qn, streamPreference);
+      const streams = await getStreams(aid, cid, qn, streamPreference);
 
-      if (streams.type === 'durl') {
-        const urls = streams.urls || [];
+      async function saveSingleFile(singleFile) {
+        const urls = singleFile.urls || [];
         if (!urls.length) throw new Error('无有效 CDN 地址');
         const sniffed = sniffPlayingUrls();
         const preferHost = hostFromUrl(sniffed.video);
@@ -1288,6 +1275,8 @@
         if (String.fromCharCode(...header.slice(4, 8)) !== 'ftyp') throw new Error('片源不是 MP4 文件，请切换清晰度后重试');
         return { dash: false, blob, filename: base + '.mp4', jobId: session.jobId };
       }
+
+      if (streams.type === 'durl') return await saveSingleFile(streams);
 
       const sniffed = sniffPlayingUrls();
       const preferHost = hostFromUrl(sniffed.video || sniffed.audio);
@@ -1366,7 +1355,25 @@
         session.merging = true;
         const mergeBytes = vBlob.size + aBlob.size;
         sendProgress(session, 'merge', 0, { received: 0, total: mergeBytes });
-        const mp4Blob = await mergeM4sInPage(vBlob, aBlob, session);
+        let mp4Blob;
+        try {
+          mp4Blob = await mergeM4sInPage(vBlob, aBlob, session);
+        } catch (error) {
+          throwIfCancelled(session);
+          // Keep integrity checks intact; use an independent complete MP4
+          // instead of saving a corrupt/unsupported DASH merge.
+          if (!/媒体封装|媒体文件尾部|媒体片段|媒体索引|合并|合成|WORKER_UNAVAILABLE|memory|allocation/i.test(String(error?.message || error))) throw error;
+          log('合并', `DASH 合并失败：${error.message}；尝试同画质单文件片源`);
+          session.merging = false;
+          try {
+            const fallback = await getSingleFileStreams(aid, cid, qn);
+            return await saveSingleFile(fallback);
+          } catch (fallbackError) {
+            throwIfCancelled(session);
+            log('合并', `单文件回退失败：${fallbackError.message}`);
+            throw new Error(`${error.message}；单文件回退失败：${fallbackError.message}`);
+          }
+        }
         sendProgress(session, 'save', 100);
         return {
           merged: true,
@@ -1451,6 +1458,7 @@
           reply(id, { type: 'ERR', error: '未知请求: ' + type });
       }
     } catch (err) {
+      log('错误', `${type}: ${err?.message || String(err)}`);
       reply(id, { type: 'ERR', error: formatAgentError(err, type) });
     }
   });

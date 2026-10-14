@@ -36,8 +36,8 @@
       videoAndAudio: '视频+音频',
       listSearchPlaceholder: '搜索已加载视频标题',
       listFilter: '列表筛选',
-      refreshCurrentPage: '刷新当前页',
-      refreshCurrentPageTitle: '只读取 B 站当前页显示的投稿',
+      refreshCurrentPage: '刷新列表',
+      refreshCurrentPageTitle: '重新读取当前页的视频列表',
       filterAll: '全部',
       filterSelected: '已选',
       sortDefault: '默认',
@@ -77,15 +77,14 @@
       saved: '已保存',
       settingsLoadFailed: '设置模块未加载，请刷新页面后重试。',
       defaultTheme: '默认',
-      'theme-cyan-mist': '苍雾青',
-      'theme-violet-haze': '夜雾紫',
-      'theme-ember': '余烬橙',
-      'theme-bronze-smoke': '铜烟棕',
+      'theme-mist-cyan': '苍雾青',
+      'theme-pine-mist': '松雾绿',
+      'theme-night-purple': '夜雾紫',
+      'theme-dark-crimson': '暗绯红',
+      'theme-ember-orange': '余烬橙',
+      'theme-copper-smoke': '铜烟棕',
       'theme-deep-ocean': '深海蓝',
       'theme-obsidian': '曜石黑',
-      'theme-tokyo-love': '东爱主题',
-      'theme-manchester-sea': '海边的曼彻斯特',
-      'theme-chinese-odyssey': '大话西游',
       chipTitle: '标题',
       chipAuthor: 'UP主',
       chipBvid: 'BV号',
@@ -168,8 +167,8 @@
       videoAndAudio: '影片+音訊',
       listSearchPlaceholder: '搜尋已載入影片標題',
       listFilter: '列表篩選',
-      refreshCurrentPage: '重新整理目前頁',
-      refreshCurrentPageTitle: '只讀取 B 站目前頁顯示的投稿',
+      refreshCurrentPage: '重新整理列表',
+      refreshCurrentPageTitle: '重新讀取目前頁面的影片列表',
       filterAll: '全部',
       filterSelected: '已選',
       sortDefault: '預設',
@@ -209,15 +208,14 @@
       saved: '已儲存',
       settingsLoadFailed: '設定模組未載入，請重新整理頁面後重試。',
       defaultTheme: '預設',
-      'theme-cyan-mist': '蒼霧青',
-      'theme-violet-haze': '夜霧紫',
-      'theme-ember': '餘燼橙',
-      'theme-bronze-smoke': '銅煙棕',
+      'theme-mist-cyan': '蒼霧青',
+      'theme-pine-mist': '松霧綠',
+      'theme-night-purple': '夜霧紫',
+      'theme-dark-crimson': '暗緋紅',
+      'theme-ember-orange': '餘燼橙',
+      'theme-copper-smoke': '銅煙棕',
       'theme-deep-ocean': '深海藍',
       'theme-obsidian': '曜石黑',
-      'theme-tokyo-love': '東愛主題',
-      'theme-manchester-sea': '海邊的曼徹斯特',
-      'theme-chinese-odyssey': '大話西遊',
       chipTitle: '標題',
       chipAuthor: 'UP主',
       chipBvid: 'BV號',
@@ -300,8 +298,8 @@
       videoAndAudio: 'Video + audio',
       listSearchPlaceholder: 'Search loaded titles',
       listFilter: 'List filters',
-      refreshCurrentPage: 'Refresh current page',
-      refreshCurrentPageTitle: 'Read only videos shown on the current Bilibili page',
+      refreshCurrentPage: 'Refresh list',
+      refreshCurrentPageTitle: 'Reload the video list for the current page',
       filterAll: 'All',
       filterSelected: 'Selected',
       sortDefault: 'Default',
@@ -341,15 +339,14 @@
       saved: 'Saved',
       settingsLoadFailed: 'Settings module failed to load. Refresh the page and try again.',
       defaultTheme: 'Default',
-      'theme-cyan-mist': 'Cyan Mist',
-      'theme-violet-haze': 'Violet Haze',
-      'theme-ember': 'Ember',
-      'theme-bronze-smoke': 'Bronze Smoke',
+      'theme-mist-cyan': 'Mist Cyan',
+      'theme-pine-mist': 'Pine Mist',
+      'theme-night-purple': 'Night Purple',
+      'theme-dark-crimson': 'Dark Crimson',
+      'theme-ember-orange': 'Ember Orange',
+      'theme-copper-smoke': 'Copper Smoke',
       'theme-deep-ocean': 'Deep Ocean',
       'theme-obsidian': 'Obsidian',
-      'theme-tokyo-love': 'Tokyo Love Story',
-      'theme-manchester-sea': 'Manchester by the Sea',
-      'theme-chinese-odyssey': 'A Chinese Odyssey',
       chipTitle: 'Title',
       chipAuthor: 'Uploader',
       chipBvid: 'BV ID',
@@ -401,6 +398,41 @@
     }
   };
 
+  // Keep the dictionary shape identical for every selectable locale.  The
+  // English entries are an intentional per-key fallback until a locale has a
+  // dedicated translation in i18n-extra.js; this is preferable to exposing
+  // raw message keys in controls that are added by a later UI revision.
+  const LANGUAGE_OPTIONS = Object.freeze([
+    ['zh-CN', '简体中文'], ['zh-TW', '繁體中文'], ['en', 'English'],
+    ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'],
+    ['fr', 'Français'], ['pt-BR', 'Português (Brasil)'], ['de', 'Deutsch']
+  ]);
+
+  // Optional locale data can provide a translator before this file loads.  It
+  // is applied again whenever an extension dictionary is merged, so late
+  // message bundles receive the same locale coverage as the base UI.
+  function applyLocaleTranslations() {
+    const translate = root.BiliDlLocaleTranslations?.translate;
+    if (typeof translate !== 'function') return;
+    for (const [code] of LANGUAGE_OPTIONS) {
+      if (!['es', 'fr', 'pt-BR', 'de'].includes(code)) continue;
+      const dictionary = messages[code] || (messages[code] = { ...messages.en });
+      for (const [key, english] of Object.entries(messages.en)) {
+        dictionary[key] = translate(code, key, english);
+      }
+    }
+  }
+  for (const [code] of LANGUAGE_OPTIONS) {
+    if (!messages[code]) messages[code] = { ...messages.en };
+  }
+  Object.values(messages).forEach((dictionary) => Object.assign(dictionary, {
+    followBrowser: dictionary.followBrowser || 'Follow browser',
+    japanese: dictionary.japanese || '日本語', korean: dictionary.korean || '한국어',
+    spanish: dictionary.spanish || 'Español', french: dictionary.french || 'Français',
+    portuguese: dictionary.portuguese || 'Português (Brasil)', german: dictionary.german || 'Deutsch'
+  }));
+  applyLocaleTranslations();
+
   let preference = 'auto';
   let language = 'zh-CN';
   const listeners = new Set();
@@ -429,16 +461,20 @@
   function storageSet(value) {
     const ext = api();
     const set = ext?.storage?.local?.set;
-    if (typeof set !== 'function') return Promise.resolve();
+    if (typeof set !== 'function') return Promise.reject(new Error('Storage is unavailable'));
     try {
       const result = set.call(ext.storage.local, value);
       if (result && typeof result.then === 'function') return result;
     } catch (_) {}
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       try {
-        set.call(ext.storage.local, value, () => resolve());
-      } catch (_) {
-        resolve();
+        set.call(ext.storage.local, value, () => {
+          const error = ext?.runtime?.lastError;
+          if (error) reject(new Error(error.message || 'Could not save settings'));
+          else resolve();
+        });
+      } catch (error) {
+        reject(error);
       }
     });
   }
@@ -448,14 +484,23 @@
     if (/^zh-(?:tw|hk|mo|hant)(?:-|$)/.test(ui)) return 'zh-TW';
     if (/^zh(?:-cn|-sg|-hans)?(?:-|$)/.test(ui) || ui === 'zh') return 'zh-CN';
     if (/^en(?:-|$)/.test(ui)) return 'en';
+    if (/^ja(?:-|$)/.test(ui)) return 'ja';
+    if (/^ko(?:-|$)/.test(ui)) return 'ko';
+    if (/^es(?:-|$)/.test(ui)) return 'es';
+    if (/^fr(?:-|$)/.test(ui)) return 'fr';
+    if (/^pt(?:-|$)/.test(ui)) return 'pt-BR';
+    if (/^de(?:-|$)/.test(ui)) return 'de';
     return 'zh-CN';
   }
 
   function normalizePreference(value) {
     if (value === 'auto' || value == null || value === '') return 'auto';
-    if (value === 'en') return 'en';
-    if (value === 'zh-TW' || value === 'zh-tw') return 'zh-TW';
-    if (value === 'zh-CN' || value === 'zh-cn') return 'zh-CN';
+    const normalized = String(value).replace(/_/g, '-').toLowerCase();
+    if (normalized === 'en') return 'en';
+    if (/^zh-(?:tw|hk|mo|hant)(?:-|$)/.test(normalized)) return 'zh-TW';
+    if (/^zh(?:-cn|-sg|-hans)?(?:-|$)/.test(normalized)) return 'zh-CN';
+    const match = LANGUAGE_OPTIONS.find(([code]) => code.toLowerCase() === normalized || code.toLowerCase().split('-')[0] === normalized.split('-')[0]);
+    if (match) return match[0];
     return 'auto';
   }
 
@@ -465,7 +510,8 @@
   }
 
   function t(key, values) {
-    const template = messages[language]?.[key] ?? messages['zh-CN']?.[key] ?? messages.en?.[key] ?? key;
+    const fallback = language.startsWith('zh') ? messages['zh-CN'] : messages.en;
+    const template = messages[language]?.[key] ?? fallback?.[key] ?? messages.en?.[key] ?? key;
     return String(template).replace(/\{(\w+)\}/g, (_, name) => String(values?.[name] ?? ''));
   }
 
@@ -473,7 +519,7 @@
     const node = scope?.querySelectorAll ? scope : root.document;
     if (!node?.querySelectorAll) return language;
     if (node.documentElement) {
-      node.documentElement.lang = language === 'en' ? 'en' : language === 'zh-TW' ? 'zh-TW' : 'zh-CN';
+      node.documentElement.lang = language;
     }
     node.querySelectorAll('[data-i18n]').forEach((element) => {
       element.textContent = t(element.dataset.i18n);
@@ -530,12 +576,16 @@
   function mergeMessages(extra) {
     if (!extra || typeof extra !== 'object') return;
     for (const lang of Object.keys(extra)) {
-      if (messages[lang]) Object.assign(messages[lang], extra[lang]);
+      if (!messages[lang]) messages[lang] = { ...messages.en };
+      Object.assign(messages[lang], extra[lang]);
     }
+    applyLocaleTranslations();
   }
 
   root.BiliDlI18n = {
     KEY,
+    languages: LANGUAGE_OPTIONS.map(([code, label]) => ({ code, label })),
+    languageOptions: () => LANGUAGE_OPTIONS.map(([code, label]) => ({ code, label })),
     ready,
     preference: () => preference,
     language: () => language,
