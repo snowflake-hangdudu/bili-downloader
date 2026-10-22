@@ -23,7 +23,7 @@
   --brand-cta: linear-gradient(135deg, #009ddb, #0074da);
 
   position: fixed;
-  /* 默认按窗口比例靠右下；手动拖拽后的 left/top 由脚本恢复。 */
+  /* 脚本会改到播放器右下角外侧；这里只是脚本运行前的占位。 */
   left: auto;
   right: max(16px, 3vw);
   bottom: max(16px, 4vh);
@@ -1564,6 +1564,10 @@
   background: var(--bdl-bg);
 }
 
+.bili-dl-plugin-icon[hidden] {
+  display: none;
+}
+
 .bili-dl-plugin-copy {
   display: flex;
   min-width: 0;
@@ -2334,6 +2338,26 @@
 .bili-dl-history-btn:hover {
   background: var(--bdl-accent-soft);
 }
+
+.bili-dl-collections-directory { padding: 16px; text-align: left; color: var(--bdl-text); }
+.bili-dl-collections-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bili-dl-collections-heading strong { font-size: 15px; font-weight: 700; }
+.bili-dl-collections-count { min-width: 24px; padding: 2px 7px; border-radius: 999px; background: var(--bdl-accent-soft); color: var(--bdl-accent); font-size: 11px; text-align: center; }
+.bili-dl-collections-count:empty { display: none; }
+.bili-dl-collections-hint { margin: 8px 0 16px; color: var(--bdl-text-muted); font-size: 12px; line-height: 1.65; }
+.bili-dl-collections-cards { display: flex; flex-direction: column; gap: 10px; }
+.bili-dl-collection-card { display: flex; align-items: center; gap: 12px; padding: 13px 12px; border: 1px solid var(--bdl-border); border-radius: 10px; background: var(--bdl-surface); color: var(--bdl-text); text-decoration: none; transition: border-color .15s, background .15s; }
+.bili-dl-collection-card:hover { border-color: var(--bdl-accent); background: var(--bdl-accent-soft); }
+.bili-dl-collection-card:focus-visible, .bili-dl-collections-more:focus-visible { outline: 2px solid var(--bdl-accent); outline-offset: 3px; }
+.bili-dl-collection-symbol { display: flex; align-items: center; justify-content: center; flex: 0 0 38px; height: 38px; border-radius: 9px; background: var(--bdl-accent-soft); color: var(--bdl-accent); font-size: 23px; }
+.bili-dl-collection-copy { min-width: 0; flex: 1; }
+.bili-dl-collection-copy strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; font-weight: 600; }
+.bili-dl-collection-copy small { display: block; margin-top: 5px; color: var(--bdl-text-muted); font-size: 11px; }
+.bili-dl-collection-arrow { flex-shrink: 0; color: var(--bdl-accent); font-size: 18px; }
+.bili-dl-collections-message { margin: 12px 0 0; color: var(--bdl-text-muted); font-size: 12px; line-height: 1.6; }
+.bili-dl-collections-message:empty { display: none; }
+.bili-dl-collections-more { width: 100%; margin-top: 12px; padding: 9px 12px; border: 1px solid var(--bdl-border); border-radius: 8px; background: var(--bdl-accent-soft); color: var(--bdl-accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.bili-dl-collections-more:disabled { opacity: .5; cursor: wait; }
 
 @media (prefers-reduced-motion: reduce) {
   #bili-dl-panel-root *, #bili-dl-panel-root *::before, #bili-dl-panel-root *::after {

@@ -487,6 +487,26 @@ async function renderPopupHistory() {
 
       }
 
+      if (Number.isInteger(h.downloadId)) {
+        const showFile = document.createElement('button');
+        showFile.type = 'button';
+        showFile.className = 'popup-history-open';
+        showFile.textContent = t('historyShowFile');
+        showFile.addEventListener('click', async () => {
+          try {
+            const [download] = await EXT.downloads.search({ id: h.downloadId });
+            if (!download || download.byExtensionId !== EXT.runtime.id || download.exists === false) {
+              throw new Error(t('historyFileMissing'));
+            }
+            await EXT.downloads.show(h.downloadId);
+          } catch (error) {
+            showFile.title = error?.message || t('historyFileMissing');
+            showFile.textContent = t('historyFileMissing');
+            showFile.disabled = true;
+          }
+        });
+        itemEl.appendChild(showFile);
+      }
       frag.appendChild(itemEl);
 
     });

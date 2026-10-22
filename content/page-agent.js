@@ -29,6 +29,9 @@
     /api\.bilibili/i
   ];
 
+  // DASH + 4K + 8K + AV1. Request high-resolution codecs without adding
+  // HDR/Dolby variants to the existing numeric quality-selection strategy.
+  const DASH_FNVAL = 16 | 128 | 1024 | 2048;
   const QUALITY_MAP = {
     127: '8K', 120: '4K', 116: '1080P60', 112: '1080P+', 80: '1080P',
     64: '720P', 32: '480P', 16: '360P', 6: '240P'
@@ -375,6 +378,10 @@
           views: arc.stat?.view,
           pubtime: arc.pubdate
         });
+        if (item) {
+          item.author = arc.author?.name || arc.owner?.name || season.upper?.name || '';
+          item.collectionPages = Array.isArray(episode.pages) ? episode.pages : null;
+        }
         if (!item || seen.has(item.bvid)) continue;
         seen.add(item.bvid);
         items.push(item);
@@ -475,6 +482,72 @@
   }
 
   let spaceWbiKey = '';
+  async function loadSpaceCollections(cursor) {
+    const match = /^\/(\d+)\/lists\/?$/.exec(location.pathname);
+    if (location.hostname !== 'space.bilibili.com' || !match) throw new Error('当前不是合集汇总页');
+    const mid = match[1];
+    if (cursor?.mid && cursor.mid !== mid) throw new Error('UP 主已切换，请重新读取合集');
+    const pn = Math.max(1, Math.floor(Number(cursor?.pn) || 1));
+    const pageSize = 20;
+    const data = await apiGet('/x/polymer/web-space/seasons_series_list?' + new URLSearchParams({ mid, page_num: String(pn), page_size: String(pageSize) }));
+    const lists = data.items_lists;
+    if (!lists || !Array.isArray(lists.seasons_list) || !Array.isArray(lists.series_list)) throw new Error('无法读取合集目录');
+    const items = [];
+    for (const [type, groups] of [['season', lists.seasons_list], ['series', lists.series_list]]) {
+      for (const group of groups) {
+        const meta = group.meta || {};
+        const id = String(type === 'season' ? meta.season_id : meta.series_id);
+        if (!/^\d+$/.test(id)) continue;
+        items.push({ id, type, title: String(meta.name || '合集'), total: Math.max(0, Number(meta.total) || 0),
+          cover: String(meta.cover || group.archives?.[0]?.pic || ''),
+          url: 'https://space.bilibili.com/' + mid + '/lists/' + id + '?type=' + type });
+      }
+    }
+    const total = Number(data.page?.total);
+    return { items, hasMore: Number.isFinite(total) ? pn * pageSize < total : items.length >= pageSize, cursor: { mid, pn: pn + 1 } };
+  }
+
+  async function loadSpaceCollectionPage(cursor) {
+    const match = /^\/(\d+)\/lists\/(\d+)\/?$/.exec(location.pathname);
+    if (!match) throw new Error('请进入具体合集详情页后下载');
+    const [, mid, collectionId] = match;
+    const collectionType = new URL(location.href).searchParams.get('type') || 'season';
+    if (!['season', 'series'].includes(collectionType)) throw new Error('暂不支持此列表类型，请进入合集详情页');
+    if (cursor && (cursor.mid !== mid || cursor.collectionId !== collectionId || cursor.collectionType !== collectionType)) {
+      throw new Error('合集已切换，请重新读取列表');
+    }
+    const pn = Math.max(1, Math.floor(Number(cursor?.pn) || 1));
+    const pageSize = 30;
+    const params = new URLSearchParams(collectionType === 'season'
+      ? { mid, season_id: collectionId, sort_reverse: 'false', page_num: String(pn), page_size: String(pageSize) }
+      : { mid, series_id: collectionId, only_normal: 'true', sort: 'asc', pn: String(pn), ps: String(pageSize) });
+    const data = await apiGet((collectionType === 'season' ? '/x/polymer/web-space/seasons_archives_list?' : '/x/series/archives?') + params);
+    if (!Array.isArray(data.archives)) throw new Error('无法读取合集视频，请刷新页面后重试');
+    const items = data.archives.map(item => ({
+      bvid: String(item.bvid || ''), aid: String(item.aid || ''), cid: '',
+      title: String(item.title || '未命名视频'), cover: String(item.pic || ''),
+      duration: Number(item.duration) || 0, views: String(item.stat?.view || ''),
+      author: String(data.meta?.upper?.name || ''), pubtime: Number(item.pubdate) || 0
+    }));
+    if (items.some(item => !item.bvid || !/^\d+$/.test(item.aid))) throw new Error('合集条目缺少视频标识，请稍后重试');
+    const total = Number(data.page?.total ?? data.meta?.total);
+    if (!Number.isFinite(total) || total < 0) throw new Error('无法读取合集视频总数');
+    const hasMore = pn * pageSize < total;
+    if (hasMore && !items.length) throw new Error('合集分页返回空数据，请稍后重试');
+    const heading = document.querySelector('main h1, main h2, .space-main h1, .space-main h2');
+    return {
+      title: String(data.meta?.name || heading?.textContent?.trim() || '视频合集'),
+      total, items, hasMore, collection: true,
+      cursor: { mid, collectionId, collectionType, pn: pn + 1 }
+    };
+  }
+
+  function loadSpaceList(cursor) {
+    // Space collection pages must never fall back to all uploads.
+    if (/^\/\d+\/lists(?:\/|$)/.test(location.pathname)) return loadSpaceCollectionPage(cursor);
+    return loadSpacePage(cursor);
+  }
+
   async function loadSpacePage(cursor) {
     const mid = location.hostname === 'space.bilibili.com' && /^\/(\d+)(?:\/|$)/.exec(location.pathname)?.[1];
     if (!mid) throw new Error('当前页面不是 UP 主空间');
@@ -512,7 +585,7 @@
   }
 
   async function loadListPage(cursor) {
-    if (location.hostname === 'space.bilibili.com') return loadSpacePage(cursor);
+    if (location.hostname === 'space.bilibili.com') return loadSpaceList(cursor);
     const context = getListContext();
     const data = await apiGet(listApiPath(context, cursor || context.cursor));
     const rawItems = Array.isArray(data.media_list) ? data.media_list : [];
@@ -529,12 +602,59 @@
     };
   }
 
+  async function expandCollectionParts(collection, currentInfo) {
+    const groups = new Array(collection.items.length);
+    let next = 0;
+    let failure = null;
+    async function expandWorker() {
+      while (!failure && next < collection.items.length) {
+        const index = next++;
+        const item = collection.items[index];
+        try {
+          const pages = item.collectionPages?.length
+            ? item.collectionPages
+            : item.bvid === currentInfo.bvid && currentInfo.pages?.length
+              ? currentInfo.pages
+              : await apiGet('/x/player/pagelist?bvid=' + encodeURIComponent(item.bvid));
+          if (!Array.isArray(pages) || !pages.length || pages.some((page) => !page.cid)) {
+            throw new Error('未返回完整分 P 列表');
+          }
+          const { collectionPages, ...archive } = item;
+          groups[index] = pages.map((page, pageIndex) => ({
+            ...archive,
+            cid: String(page.cid),
+            listKey: `${item.bvid}:${page.cid}`,
+            pageIndex: Math.max(0, (Number(page.page) || pageIndex + 1) - 1),
+            part: Number(page.page) || pageIndex + 1,
+            partTitle: String(page.part || item.title),
+            title: pages.length > 1 ? `${item.title} - P${Number(page.page) || pageIndex + 1} ${page.part || ''}`.trim() : item.title,
+            duration: Number(page.duration) || item.duration,
+            partCount: pages.length
+          }));
+          log('合集', `已读取 ${index + 1}/${collection.items.length} 个投稿：${item.bvid} · ${pages.length} 个分 P`);
+        } catch (error) {
+          failure ||= new Error(`合集分 P 读取失败（${item.title}）：${error.message || error}`);
+        }
+      }
+    }
+    // Bound metadata requests; flatten after all workers finish to preserve order.
+    await Promise.all([expandWorker(), expandWorker()]);
+    if (failure) throw failure;
+    const seen = new Set();
+    const items = groups.flat().filter((item) => {
+      if (seen.has(item.listKey)) return false;
+      seen.add(item.listKey);
+      return true;
+    });
+    return { ...collection, items, total: items.length, archiveTotal: collection.items.length };
+  }
+
   async function resolveList(cursor) {
-    if (location.hostname === 'space.bilibili.com') return loadSpacePage(cursor || null);
+    if (location.hostname === 'space.bilibili.com') return loadSpaceList(cursor || null);
     if (/^\/video\//.test(location.pathname)) {
       const info = await resolveVideo(location.href, 0);
       if (!info.collection) throw new Error('当前视频未提供可下载的合集条目');
-      return info.collection;
+      return expandCollectionParts(info.collection, info);
     }
     const state = window.__INITIAL_STATE__ || {};
     const resources = Array.isArray(state.resourceList) ? state.resourceList : [];
@@ -599,7 +719,7 @@
 
     try {
       const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=16&fourk=1&platform=pc`
+        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
       );
       if (dash.dash?.video?.length) {
         const videos = dash.dash.video.filter((v) => Number(v.id) === Number(qn));
@@ -630,18 +750,18 @@
 
   async function getQualities(aid, cid) {
     const data = await apiGet(
-      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=16&fourk=1&platform=pc`
+      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=127&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
     );
 
     const dashIds = new Set();
     for (const v of data.dash?.video || []) {
-      if (pickBestStreamUrl(v)) dashIds.add(v.id);
+      if (pickBestStreamUrl(v) && Number.isFinite(Number(v.id))) dashIds.add(Number(v.id));
     }
     const maxDashQn = dashIds.size ? Math.max(...dashIds) : 0;
 
     const qualities = [];
     for (const fmt of data.support_formats || []) {
-      const qn = fmt.quality;
+      const qn = Number(fmt.quality);
       const inDash = dashIds.has(qn);
       const viaDurl = qn <= 64;
       // 无对应片源且无法走 durl 单文件 → 不展示（如虚假的 1080P/4K）
@@ -719,10 +839,10 @@
     // Legacy single-file sources can fail even while the DASH source plays.
     try {
       const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=16&fourk=1&platform=pc`
+        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
       );
       if (dash.dash?.video?.length) {
-        const videos = dash.dash.video.filter((v) => v.id === qn);
+        const videos = dash.dash.video.filter((v) => Number(v.id) === Number(qn));
         if (!videos.length) {
           const maxId = Math.max(...dash.dash.video.map((v) => v.id));
           throw new Error(`该视频无 ${QUALITY_MAP[qn] || qn + 'P'} 片源（源最高 ${QUALITY_MAP[maxId] || maxId + 'P'}）`);
@@ -757,7 +877,7 @@
   /** 仅下载音频轨（DASH 音频即 AAC fMP4，可直接存为 .m4a） */
   async function getAudioStreams(aid, cid) {
     const dash = await apiGet(
-      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=16&fourk=1&platform=pc`
+      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
     );
     const streams = collectAudioItems(dash.dash).map((audio) => ({
       urls: extractStreamUrls(audio),
@@ -804,7 +924,7 @@
     const dur = Math.max(Number(durationSec) || 0, 1);
     try {
       const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=16&fourk=1&platform=pc`
+        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
       );
       const audio = collectAudioItems(dash.dash)[0];
       if (audio?.bandwidth) {
@@ -1416,6 +1536,9 @@
           break;
         case 'RESOLVE_LIST':
           reply(id, { type: 'OK', data: await resolveList(e.data?.cursor || null) });
+          break;
+        case 'SPACE_COLLECTIONS':
+          reply(id, { type: 'OK', data: await loadSpaceCollections(e.data?.cursor || null) });
           break;
         case 'LOAD_LIST_PAGE':
           reply(id, { type: 'OK', data: await loadListPage(e.data.cursor) });

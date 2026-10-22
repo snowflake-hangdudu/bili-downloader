@@ -28,11 +28,22 @@ chrome.downloads.onDeterminingFilename?.addListener((item, suggest) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === 'BILI_DL_CHECK_DOWNLOAD_CONTEXT') {
+    if (!isBilibiliSender(_sender)) {
+      sendResponse({ ok: false, error: '不允许的下载请求' });
+      return;
+    }
+    sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
+    return;
+  }
   if (['BILI_DL_SAVE_MEDIA', 'BILI_DL_MEDIA_STATE', 'BILI_DL_CANCEL_MEDIA'].includes(msg?.type)) {
     (async () => {
       const senderUrl = new URL(_sender.url || '');
       if (!isBilibiliSender(_sender)) throw new Error('不允许的下载请求');
       if (msg.type === 'BILI_DL_SAVE_MEDIA') {
+        if (_sender.tab.incognito && !chrome.extension.inIncognitoContext) {
+          throw new Error('无痕保存环境未分离，请重载扩展并重新打开无痕页面');
+        }
         const url = new URL(String(msg.url || ''));
         if (url.protocol !== 'blob:' || url.origin !== senderUrl.origin) throw new Error('无效的媒体地址');
         const filename = String(msg.filename || '');
@@ -44,8 +55,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         let downloadId;
         try {
           downloadId = await chrome.downloads.download({ url: url.href, filename, saveAs: false, conflictAction: 'uniquify' });
+          console.info('[BiliDL] 浏览器保存已创建', { downloadId, filename, incognito: Boolean(_sender.tab.incognito) });
         } catch (error) {
           pendingMediaFilenames.delete(url.href);
+          console.warn('[BiliDL] 浏览器保存创建失败', { filename, incognito: Boolean(_sender.tab.incognito), error: String(error?.message || error) });
           throw error;
         }
         return { ok: true, downloadId };
