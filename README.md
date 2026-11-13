@@ -5,6 +5,8 @@ Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B �
 - 版本：1.3.7
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
+- 商店直链（Chrome）：https://chromewebstore.google.com/detail/dplkepecnmdileeogcflfbjcoonkfaom
+- 商店直链（Firefox）：https://addons.mozilla.org/firefox/addon/bilibili-dl-assistant/
 
 ## 功能概览
 
@@ -48,48 +50,3 @@ Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B �
 爱发电主页：https://afdian.com/a/hangdudu
 
 所有现有免费功能均可继续免费使用，赞助完全自愿。
-
-## 开发者
-
-详见 **[DEVELOPER.md](DEVELOPER.md)**（新开会话先读此文档即可继续开发）。
-
-## 本地加载
-
-1. `chrome://extensions` 或 `edge://extensions`
-2. 开启「开发者模式」
-3. 「加载 unpacked」→ 选择本目录
-
-## 本地检查
-
-```bash
-node --check content/content.js
-node --check content/page-agent.js
-node --check background.js
-node test/task-ui-regression.test.mjs
-node test/list-pagination-regression.test.mjs
-node test/layout-regression.test.mjs
-git diff --check
-```
-
-> 本地检查不替代真实浏览器下载验收；重载后仍应验证普通视频、分 P、列表、封面和通知。
-
-## 打包（仅在发布时）
-
-```bash
-python scripts/pack.py
-```
-
-Firefox 发布包：
-
-```bash
-python scripts/pack_firefox.py
-```
-
-## 商店上架
-
-| 商店 | 文档 |
-|------|------|
-| Microsoft Edge | [store/EDGE_SUBMIT.md](store/EDGE_SUBMIT.md) |
-| Chrome Web Store | [store/CHROME_SUBMIT.md](store/CHROME_SUBMIT.md) |
-| Firefox Add-ons (AMO) | [store/FIREFOX_SUBMIT.md](store/FIREFOX_SUBMIT.md) |
-| 图片资源 | [store/SCREENSHOTS.md](store/SCREENSHOTS.md) |
