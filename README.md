@@ -1,8 +1,8 @@
-# B站视频下载助手
+# B站bilibili下载助手
 
 Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B 站普通视频页、`/list/` 列表页及 UP 主空间视频投稿下载，仅供个人学习使用。
 
-- 版本：1.3.2
+- 版本：1.3.7
 - 反馈邮箱：hangdudu0@agent.qq.com
 - 商店直链（Edge）：https://microsoftedge.microsoft.com/addons/detail/fdcimmiafpnpkehegehnjjkllogfjmem
 
@@ -38,6 +38,16 @@ Microsoft Edge / Chrome / Firefox 浏览器扩展（Manifest V3）。支持 B �
 |------|------|
 | 常见问题 | https://snowflake-hangdudu.github.io/bili-downloader/faq.html |
 | 隐私政策 | https://snowflake-hangdudu.github.io/bili-downloader/ |
+
+## 开发者声明
+
+本项目由独立开发者开发并持续维护。
+
+现已正式入驻爱发电，欢迎通过爱发电支持项目的持续开发、功能更新与日常维护。
+
+爱发电主页：https://afdian.com/a/hangdudu
+
+所有现有免费功能均可继续免费使用，赞助完全自愿。
 
 ## 开发者
 

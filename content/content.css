@@ -23,13 +23,13 @@
   --brand-cta: linear-gradient(135deg, #009ddb, #0074da);
 
   position: fixed;
-  /* 脚本会改到播放器右下角外侧；这里只是脚本运行前的占位。 */
+  /* 默认相对可视区域右下角定位，脚本负责缩放与拖拽边界。 */
   left: auto;
   right: max(16px, 3vw);
   bottom: max(16px, 4vh);
   width: 64px;
   height: 64px;
-  z-index: 999999;
+  z-index: 2147483647;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 13px;
   line-height: 1.4;
@@ -119,6 +119,21 @@
 .bili-dl-list-body.is-queue-running .bili-dl-list-items { max-height: 142px; }
 .bili-dl-list-item { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--bdl-border); cursor: pointer; }
 .bili-dl-list-item:last-child { border-bottom: 0; }
+.bili-dl-list-item.is-unavailable {
+  cursor: not-allowed;
+  background: var(--bdl-surface);
+  color: var(--bdl-text-muted);
+}
+.bili-dl-list-item.is-unavailable strong {
+  color: var(--bdl-text-muted);
+  font-weight: 400;
+}
+.bili-dl-list-item input:disabled { cursor: not-allowed; opacity: .55; }
+.bili-dl-list-item .bili-dl-pgc-access {
+  color: var(--bdl-accent-strong);
+  white-space: normal;
+}
+.bili-dl-list-item.is-unavailable .bili-dl-pgc-access { color: var(--bdl-text-muted); }
 .bili-dl-list-item-index { color: var(--bdl-text-muted); font-size: 11px; min-width: 18px; text-align: right; }
 .bili-dl-list-item-meta { min-width: 0; display: grid; gap: 2px; }
 .bili-dl-list-item-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
@@ -1762,12 +1777,33 @@
   gap: 9px;
 }
 
-.bili-dl-info-body .bili-dl-donate-intro {
+.bili-dl-info-body .bili-dl-donate-intro,
+.bili-dl-donate-statement p {
   align-self: stretch;
   margin: 0;
   color: var(--bdl-text-muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.bili-dl-donate-statement {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bili-dl-donate-afdian {
+  color: var(--bdl-accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.bili-dl-donate-afdian:hover {
+  text-decoration: underline;
 }
 
 .bili-dl-donate-methods {

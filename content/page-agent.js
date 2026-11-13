@@ -63,6 +63,8 @@
     if (m) return { kind: 'aid', value: m[1] };
     m = href.match(/(BV[a-zA-Z0-9]{10})/i);
     if (m) return { kind: 'bvid', value: m[1] };
+    m = path.match(/\/bangumi\/play\/(ep|ss)(\d+)/i);
+    if (m) return { kind: m[1].toLowerCase() === 'ep' ? 'epid' : 'season', value: m[2] };
     return null;
   }
 
@@ -322,9 +324,99 @@
     } finally { controller.abort(); }
   }
 
+  /** PGC 接口把成功数据放在 result，不是普通视频接口的 data。 */
+  async function pgcApiGet(apiPath) {
+    const controller = new AbortController();
+    try {
+      return await withStallTimeout((async () => {
+        const res = await fetch('https://api.bilibili.com' + apiPath, {
+          credentials: 'include', referrer: API_REFERRER,
+          referrerPolicy: 'strict-origin-when-cross-origin', signal: controller.signal
+        });
+        if (!res.ok) throw new Error('接口请求失败 HTTP ' + res.status);
+        const json = await res.json();
+        if (json.code !== 0) throw new Error((json.message || '接口错误') + ' (API code=' + json.code + ')');
+        if (!json.result) throw new Error('官方剧集接口未返回播放信息');
+        return json.result;
+      })(), controller, 20000);
+    } finally { controller.abort(); }
+  }
+
+  function pgcEpisodeList(season) {
+    const groups = [season?.episodes || []];
+    for (const section of season?.section || season?.sections || []) groups.push(section?.episodes || []);
+    const seen = new Set();
+    return groups.flat().filter((episode) => {
+      const id = String(episode?.id || episode?.ep_id || '');
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
+  function normalizePgcEpisode(episode, season, ordinal) {
+    const epId = String(episode?.id || episode?.ep_id || '');
+    const aid = String(episode?.aid || '');
+    const cid = String(episode?.cid || '');
+    if (!epId || !aid || !cid) return null;
+    const epTitle = String(episode.long_title || episode.share_copy || episode.title || `第 ${ordinal + 1} 集`).trim();
+    const seasonTitle = String(season?.season_title || season?.title || '官方剧集').trim();
+    return {
+      bvid: String(episode.bvid || `ep${epId}`), aid, cid, epId,
+      pgc: true, href: `https://www.bilibili.com/bangumi/play/ep${epId}`,
+      title: `${seasonTitle} - ${epTitle}`.trim(),
+      part: episode.title || String(ordinal + 1), partTitle: epTitle,
+      cover: String(episode.cover || season?.cover || ''),
+      duration: Number(episode.duration || 0) / (Number(episode.duration || 0) > 10000 ? 1000 : 1),
+      views: String(episode.stat?.view || ''), pubtime: Number(episode.pub_time || 0),
+      author: String(season?.up_info?.uname || season?.publisher?.name || ''),
+      sourceId: epId
+    };
+  }
+
+  async function resolvePgcVideo(id) {
+    const query = id.kind === 'epid' ? `ep_id=${id.value}` : `season_id=${id.value}`;
+    const season = await pgcApiGet('/pgc/view/web/season?' + query);
+    const episodes = pgcEpisodeList(season);
+    const currentId = id.kind === 'epid' ? String(id.value) : String(season.user_status?.progress?.last_ep_id || season.new_ep?.id || '');
+    // Never silently use episode one when the requested ep is absent.
+    const current = episodes.find((episode) => String(episode.id || episode.ep_id) === currentId)
+      || (id.kind === 'season' ? episodes[0] : null);
+    if (!current) throw new Error('未在官方剧集选集中找到当前分集');
+    const items = episodes.map((episode, index) => normalizePgcEpisode(episode, season, index)).filter(Boolean);
+    const currentInfo = normalizePgcEpisode(current, season, Math.max(0, episodes.indexOf(current)));
+    if (!currentInfo) throw new Error('官方剧集缺少视频标识');
+    return {
+      ...currentInfo,
+      pages: [{ cid: currentInfo.cid, page: 1, part: currentInfo.partTitle, duration: currentInfo.duration }],
+      pic: currentInfo.cover,
+      collection: { title: season.season_title || season.title || '官方剧集', total: items.length, items, hasMore: false, cursor: null, collection: true, pgc: true }
+    };
+  }
+
+  async function getPlayurl(aid, cid, qn, fnval, epId) {
+    const params = new URLSearchParams({ cid: String(cid), qn: String(qn), fnval: String(fnval), platform: 'pc' });
+    if (epId) {
+      params.set('ep_id', String(epId));
+      params.set('fourk', '1');
+      const result = await pgcApiGet('/pgc/player/web/playurl?' + params);
+      if (result.is_preview === 1 || result.is_preview === true) {
+        throw new Error('当前账号仅可试看，请登录具备完整观看权限的账号');
+      }
+      if (result.is_drm === true || result.is_drm === 1) {
+        throw new Error('该视频使用受保护的播放格式，暂不支持下载');
+      }
+      return result;
+    }
+    params.set('avid', String(aid));
+    if (Number(fnval) !== 1) { params.set('fnver', '0'); params.set('fourk', '1'); }
+    return apiGet('/x/player/playurl?' + params);
+  }
+
   async function resolveVideo(href, pageIndex) {
     const id = parseVideoId(href);
     if (!id) throw new Error('无法识别视频 URL');
+    if (id.kind === 'epid' || id.kind === 'season') return resolvePgcVideo(id);
 
     let data;
     try {
@@ -651,6 +743,11 @@
 
   async function resolveList(cursor) {
     if (location.hostname === 'space.bilibili.com') return loadSpaceList(cursor || null);
+    if (/^\/bangumi\/play\/(?:ep|ss)\d+/i.test(location.pathname)) {
+      const info = await resolveVideo(location.href, 0);
+      if (!info.collection) throw new Error('当前官方剧集未提供可下载的选集');
+      return info.collection;
+    }
     if (/^\/video\//.test(location.pathname)) {
       const info = await resolveVideo(location.href, 0);
       if (!info.collection) throw new Error('当前视频未提供可下载的合集条目');
@@ -698,14 +795,12 @@
     return null;
   }
 
-  async function estimateDownloadSize(aid, cid, qn, durationSec, streamPreference = 'high-bitrate') {
+  async function estimateDownloadSize(aid, cid, qn, durationSec, streamPreference = 'high-bitrate', epId = '') {
     const dur = Math.max(Number(durationSec) || 0, 1);
 
     if (qn <= 64) {
       try {
-        const durl = await apiGet(
-          `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`
-        );
+        const durl = await getPlayurl(aid, cid, qn, 1, epId);
         if (durl.durl?.[0]?.size) {
           const sizeBytes = durl.durl[0].size;
           return {
@@ -718,9 +813,7 @@
     }
 
     try {
-      const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
-      );
+      const dash = await getPlayurl(aid, cid, qn, DASH_FNVAL, epId);
       if (dash.dash?.video?.length) {
         const videos = dash.dash.video.filter((v) => Number(v.id) === Number(qn));
         const video = selectVideoStream(videos, streamPreference) || dash.dash.video[0];
@@ -748,59 +841,52 @@
     return { sizeBytes: 0, sizeLabel: '未知', estimateNote: null };
   }
 
-  async function getQualities(aid, cid) {
-    const data = await apiGet(
-      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=127&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
-    );
+  function actualQualityLabel(data, qn) {
+    const format = data.support_formats?.find(item => Number(item.quality) === Number(qn));
+    return format?.new_description || QUALITY_MAP[qn] || `${qn}P`;
+  }
 
-    const dashIds = new Set();
-    for (const v of data.dash?.video || []) {
-      if (pickBestStreamUrl(v) && Number.isFinite(Number(v.id))) dashIds.add(Number(v.id));
-    }
-    const maxDashQn = dashIds.size ? Math.max(...dashIds) : 0;
+  function downloadableSingle(data) {
+    return Number(data?.quality) > 0 && /mp4/i.test(data?.format || '')
+      && data.durl?.length === 1 && extractDurlUrls(data.durl[0]).length > 0;
+  }
 
-    const qualities = [];
-    for (const fmt of data.support_formats || []) {
-      const qn = Number(fmt.quality);
-      const inDash = dashIds.has(qn);
-      const viaDurl = qn <= 64;
-      // 无对应片源且无法走 durl 单文件 → 不展示（如虚假的 1080P/4K）
-      if (!inDash && !viaDurl) continue;
-      qualities.push({
-        qn,
-        label: fmt.new_description || QUALITY_MAP[qn] || qn + 'P',
-        mode: viaDurl ? 'durl' : 'dash'
-      });
+  async function getQualities(aid, cid, epId = '') {
+    const data = await getPlayurl(aid, cid, 127, DASH_FNVAL, epId);
+    const actual = new Map();
+    for (const video of data.dash?.video || []) {
+      const qn = Number(video.id);
+      if (qn > 0 && pickBestStreamUrl(video)) actual.set(qn, { qn, label: actualQualityLabel(data, qn), mode: 'dash' });
     }
-
-    if (!qualities.length && dashIds.size) {
-      for (const qn of [...dashIds].sort((a, b) => b - a)) {
-        qualities.push({ qn, label: QUALITY_MAP[qn] || qn + 'P', mode: qn <= 64 ? 'durl' : 'dash' });
-      }
-    }
-    if (!qualities.length) {
-      const d = await apiGet(`/x/player/playurl?avid=${aid}&cid=${cid}&qn=16&fnval=1&platform=pc`);
-      for (const fmt of d.support_formats || []) {
-        if (fmt.quality <= 64) {
-          qualities.push({
-            qn: fmt.quality,
-            label: fmt.new_description || fmt.quality + 'P',
-            mode: 'durl'
-          });
+    if (!actual.size) {
+      // MP4 and legacy FLV can expose different qualities. Probe the MP4
+      // format and use returned quality IDs, never the requested IDs.
+      const single = await getPlayurl(aid, cid, 127, 1, epId);
+      const remember = result => {
+        if (!downloadableSingle(result)) return;
+        const qn = Number(result.quality);
+        actual.set(qn, { qn, label: actualQualityLabel(result, qn), mode: 'durl' });
+      };
+      remember(single);
+      const candidates = [...new Set((single.support_formats || []).map(fmt => Number(fmt.quality)))]
+        .filter(qn => qn > 0 && qn !== Number(single.quality));
+      // Bound API pressure even when an endpoint advertises many formats.
+      let cursor = 0;
+      async function probe() {
+        while (cursor < candidates.length) {
+          const qn = candidates[cursor++];
+          try { remember(await getPlayurl(aid, cid, qn, 1, epId)); }
+          catch { /* Failed probes are not advertised as downloadable. */ }
         }
       }
+      await Promise.all([probe(), probe()]);
     }
-
-    // 隐藏 360P 及更低；若过滤后为空则保留原列表，避免无法下载
-    const preferred = qualities.filter((q) => Number(q.qn) > 16);
+    const qualities = [...actual.values()].sort((a, b) => b.qn - a.qn);
+    if (!qualities.length) throw new Error('该视频目前未返回可下载的 MP4 或 DASH 片源');
+    const preferred = qualities.filter(q => q.qn > 16);
     const visible = preferred.length ? preferred : qualities;
-
-    return {
-      qualities: visible.sort((a, b) => b.qn - a.qn),
-      maxQn: maxDashQn,
-      maxLabel: QUALITY_MAP[maxDashQn] || (maxDashQn ? maxDashQn + 'P' : ''),
-      loginHint: buildLoginHint(maxDashQn)
-    };
+    return { qualities: visible, maxQn: qualities[0].qn, maxLabel: qualities[0].label,
+      loginHint: buildLoginHint(qualities[0].qn) };
   }
 
   function isAvcVideoStream(item) {
@@ -825,28 +911,26 @@
     })[0] || null;
   }
 
-  async function getSingleFileStreams(aid, cid, qn) {
-    const data = await apiGet(`/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=1&platform=pc`);
+  async function getSingleFileStreams(aid, cid, qn, epId = '') {
+    const data = await getPlayurl(aid, cid, qn, 1, epId);
     if (data.durl?.length > 1) throw new Error('该片源由多个旧格式片段组成，请切换清晰度后重试');
     const urls = data.durl?.length === 1 ? extractDurlUrls(data.durl[0]) : [];
     if (!urls.length) throw new Error('无法获取单文件播放流');
-    if (Number(data.quality) !== Number(qn)) throw new Error('单文件片源画质与请求不符，请切换清晰度后重试');
-    return { type: 'durl', urls };
+    if (!downloadableSingle(data)) throw new Error('该片源不是可下载的单文件 MP4');
+    return { type: 'durl', urls, actualQn: Number(data.quality), actualLabel: actualQualityLabel(data, data.quality) };
   }
 
-  async function getStreams(aid, cid, qn, streamPreference = 'high-bitrate') {
+  async function getStreams(aid, cid, qn, streamPreference = 'high-bitrate', epId = '') {
     // Prefer the same DASH source used by the player, including 720P and below.
     // Legacy single-file sources can fail even while the DASH source plays.
     try {
-      const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=${qn}&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
-      );
+      const dash = await getPlayurl(aid, cid, qn, DASH_FNVAL, epId);
       if (dash.dash?.video?.length) {
-        const videos = dash.dash.video.filter((v) => Number(v.id) === Number(qn));
-        if (!videos.length) {
-          const maxId = Math.max(...dash.dash.video.map((v) => v.id));
-          throw new Error(`该视频无 ${QUALITY_MAP[qn] || qn + 'P'} 片源（源最高 ${QUALITY_MAP[maxId] || maxId + 'P'}）`);
-        }
+        const available = dash.dash.video.filter(v => Number(v.id) > 0 && pickBestStreamUrl(v));
+        const exact = available.filter(v => Number(v.id) === Number(qn));
+        const lower = available.filter(v => Number(v.id) <= Number(qn)).sort((a, b) => Number(b.id) - Number(a.id));
+        const actualQn = exact.length ? Number(qn) : Number(lower[0]?.id || available.slice().sort((a, b) => Number(a.id) - Number(b.id))[0]?.id);
+        const videos = available.filter(v => Number(v.id) === actualQn);
         const video = selectVideoStream(videos, streamPreference);
         const audioUrls = collectAudioUrls(dash.dash);
         const videoUrl = pickBestStreamUrl(video);
@@ -854,7 +938,7 @@
         if (!videoUrl) throw new Error('无法解析视频 CDN 地址');
         log('步骤3', `DASH ${qn}P ${streamPreference === 'compatible' ? '兼容优先' : '高码率优先'} · 视频=${hostFromUrl(videoUrl)} ${Math.round(streamBandwidth(video) / 1000)}kbps · 音频=${audioUrl ? hostFromUrl(audioUrl) : '无'} (${audioUrls.length}路)`);
         return {
-          type: 'dash',
+          type: 'dash', actualQn: Number(video.id), actualLabel: actualQualityLabel(dash, video.id),
           video: videoUrl,
           videoUrls: extractStreamUrls(video),
           audio: audioUrl,
@@ -865,20 +949,18 @@
       log('步骤3', 'DASH 获取失败: ' + e.message);
     }
 
-    return getSingleFileStreams(aid, cid, qn);
+    return getSingleFileStreams(aid, cid, qn, epId);
   }
 
   function safeFilename(name, fallback) {
-    const cleaned = (name || fallback || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const cleaned = (name || fallback || '').replace(/[\\/:*?"<>|~]/g, '_').trim();
     const chars = Array.from(cleaned); // 按 Unicode 码点，避免截断 emoji/代理对
-    return chars.length <= 80 ? cleaned : chars.slice(0, 80).join('');
+    return chars.length <= 120 ? cleaned : chars.slice(0, 120).join('');
   }
 
   /** 仅下载音频轨（DASH 音频即 AAC fMP4，可直接存为 .m4a） */
-  async function getAudioStreams(aid, cid) {
-    const dash = await apiGet(
-      `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
-    );
+  async function getAudioStreams(aid, cid, epId = '') {
+    const dash = await getPlayurl(aid, cid, 80, DASH_FNVAL, epId);
     const streams = collectAudioItems(dash.dash).map((audio) => ({
       urls: extractStreamUrls(audio),
       id: audio.id,
@@ -888,12 +970,12 @@
     return streams;
   }
 
-  async function handleAudioOnly(aid, cid, title, jobId, filenameBase) {
+  async function handleAudioOnly(aid, cid, title, jobId, filenameBase, epId = '') {
     const session = createSession(jobId);
     try {
       if (session.cancelled) throw new Error('下载已取消');
       const base = safeFilename(filenameBase || title, 'audio');
-      const streams = await getAudioStreams(aid, cid);
+      const streams = await getAudioStreams(aid, cid, epId);
       const urls = [];
       const seen = new Set();
       for (const stream of streams) {
@@ -920,12 +1002,10 @@
   }
 
   /** 音频模式体积预估（仅音频轨带宽） */
-  async function estimateAudioSize(aid, cid, durationSec) {
+  async function estimateAudioSize(aid, cid, durationSec, epId = '') {
     const dur = Math.max(Number(durationSec) || 0, 1);
     try {
-      const dash = await apiGet(
-        `/x/player/playurl?avid=${aid}&cid=${cid}&qn=80&fnval=${DASH_FNVAL}&fnver=0&fourk=1&platform=pc`
-      );
+      const dash = await getPlayurl(aid, cid, 80, DASH_FNVAL, epId);
       const audio = collectAudioItems(dash.dash)[0];
       if (audio?.bandwidth) {
         const bytes = Math.round((audio.bandwidth * dur) / 8);
@@ -1373,12 +1453,12 @@
     });
   }
 
-  async function handleDownload(aid, cid, qn, title, jobId, filenameBase, streamPreference = 'high-bitrate', includeAudioBlob = false) {
+  async function handleDownload(aid, cid, qn, title, jobId, filenameBase, streamPreference = 'high-bitrate', includeAudioBlob = false, epId = '') {
     const session = createSession(jobId);
     try {
       if (session.cancelled) throw new Error('下载已取消');
       const base = safeFilename(filenameBase || title, 'video');
-      const streams = await getStreams(aid, cid, qn, streamPreference);
+      const streams = await getStreams(aid, cid, qn, streamPreference, epId);
 
       async function saveSingleFile(singleFile) {
         const urls = singleFile.urls || [];
@@ -1393,7 +1473,7 @@
         throwIfCancelled(session);
         const header = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
         if (String.fromCharCode(...header.slice(4, 8)) !== 'ftyp') throw new Error('片源不是 MP4 文件，请切换清晰度后重试');
-        return { dash: false, blob, filename: base + '.mp4', jobId: session.jobId };
+        return { dash: false, blob, filename: base + '.mp4', jobId: session.jobId, actualQn: singleFile.actualQn, actualLabel: singleFile.actualLabel };
       }
 
       if (streams.type === 'durl') return await saveSingleFile(streams);
@@ -1486,7 +1566,7 @@
           log('合并', `DASH 合并失败：${error.message}；尝试同画质单文件片源`);
           session.merging = false;
           try {
-            const fallback = await getSingleFileStreams(aid, cid, qn);
+            const fallback = await getSingleFileStreams(aid, cid, qn, epId);
             return await saveSingleFile(fallback);
           } catch (fallbackError) {
             throwIfCancelled(session);
@@ -1496,7 +1576,7 @@
         }
         sendProgress(session, 'save', 100);
         return {
-          merged: true,
+          merged: true, actualQn: streams.actualQn, actualLabel: streams.actualLabel,
           filename: base + '.mp4',
           blob: mp4Blob,
           // 列表的“视频+音频”可复用已下载的 DASH 音频轨保存 M4A，
@@ -1543,28 +1623,49 @@
         case 'LOAD_LIST_PAGE':
           reply(id, { type: 'OK', data: await loadListPage(e.data.cursor) });
           break;
+        case 'CHECK_PGC_ACCESS': {
+          if (!/^\d+$/.test(String(e.data.epId || ''))) throw new Error('无效的剧集编号');
+          let access;
+          try {
+            const data = await getPlayurl(e.data.aid, e.data.cid, 127, DASH_FNVAL, e.data.epId);
+            const video = (data.dash?.video || []).some(item => pickBestStreamUrl(item))
+              || (data.durl?.length === 1 && extractDurlUrls(data.durl[0]).length > 0);
+            const audio = collectAudioItems(data.dash || {}).some(item => extractStreamUrls(item).length);
+            access = { state: 'checked', video, audio };
+          } catch (error) {
+            const message = String(error?.message || error);
+            const reason = /试看/.test(message) ? 'preview'
+              : /地区|区域/.test(message) ? 'region'
+              : /受保护|DRM/i.test(message) ? 'protected'
+              : /权限|会员|付费|登录|10403/.test(message) ? 'permission' : 'error';
+            access = { state: reason === 'error' ? 'error' : 'blocked', reason, video: false, audio: false };
+          }
+          reply(id, { type: 'OK', data: access });
+          break;
+        }
         case 'GET_QUALITIES':
-          reply(id, { type: 'OK', data: await getQualities(e.data.aid, e.data.cid) });
+          reply(id, { type: 'OK', data: await getQualities(e.data.aid, e.data.cid, e.data.epId) });
           break;
         case 'GET_ESTIMATE':
           reply(id, {
             type: 'OK',
             data: e.data.audioOnly
-              ? await estimateAudioSize(e.data.aid, e.data.cid, e.data.duration)
+              ? await estimateAudioSize(e.data.aid, e.data.cid, e.data.duration, e.data.epId)
               : await estimateDownloadSize(
                   e.data.aid,
                   e.data.cid,
                   e.data.qn,
                   e.data.duration,
-                  e.data.streamPreference
+                  e.data.streamPreference,
+                  e.data.epId
                 )
           });
           break;
         case 'START_DOWNLOAD': {
           const jobId = e.data.jobId || null;
           const result = e.data.audioOnly
-            ? await handleAudioOnly(e.data.aid, e.data.cid, e.data.title, jobId, e.data.filenameBase)
-            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase, e.data.streamPreference, e.data.includeAudioBlob === true);
+            ? await handleAudioOnly(e.data.aid, e.data.cid, e.data.title, jobId, e.data.filenameBase, e.data.epId)
+            : await handleDownload(e.data.aid, e.data.cid, e.data.qn, e.data.title, jobId, e.data.filenameBase, e.data.streamPreference, e.data.includeAudioBlob === true, e.data.epId);
           reply(id, { type: 'OK', data: result });
           break;
         }

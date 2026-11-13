@@ -1,6 +1,9 @@
 // MV3 Service Worker — 处理受限的远程配置读取、浏览器原生下载与设置页
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   const v = chrome.runtime.getManifest().version;
+  if (details.reason === 'install' || details.reason === 'update') {
+    chrome.storage.local.remove('biliDlFabPos').catch((error) => console.warn('[BiliDL] 重置下载图标位置失败', error));
+  }
   console.log('[BiliDL] 已安装 v' + v);
 });
 

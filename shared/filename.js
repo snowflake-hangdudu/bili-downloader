@@ -42,8 +42,8 @@
   function sanitizeSegment(raw, fallback) {
     let text = String(raw == null ? '' : raw)
       .normalize('NFKC')
-      .replace(/[\u0000-\u001F\u007F]/g, '')
-      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, '')
+      .replace(/[\\/:*?"<>|~]/g, '_')
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/[. ]+$/g, '');
@@ -104,6 +104,24 @@
     const check = validateTemplate(template);
     if (!check.ok) throw new Error(check.error);
     const values = buildValues(meta, opts);
+    // Reserve room for identifiers and quality before shortening free-form text.
+    // A long title must not consume the suffix of a configured template.
+    const occurrences = {};
+    check.template.replace(/\{([a-zA-Z]+)\}/g, (_, key) => {
+      occurrences[key] = (occurrences[key] || 0) + 1;
+      return '';
+    });
+    const expandedLength = () => Array.from(check.template.replace(/\{([a-zA-Z]+)\}/g, (_, key) => values[key] || '')).length;
+    for (const key of ['title', 'partTitle', 'author']) {
+      const count = occurrences[key] || 0;
+      const excess = expandedLength() - MAX_BASENAME;
+      if (!count || excess <= 0) continue;
+      const chars = Array.from(values[key]);
+      const budget = Math.max(1, chars.length - Math.ceil(excess / count));
+      values[key] = budget < chars.length
+        ? (budget > 3 ? chars.slice(0, budget - 3).join('') + '...' : chars.slice(0, budget).join(''))
+        : values[key];
+    }
     let rendered = check.template.replace(/\{([a-zA-Z]+)\}/g, (_, key) => values[key] || '');
     rendered = sanitizeSegment(rendered.replace(/\s+-\s+/g, ' - ').replace(/\s{2,}/g, ' '), 'bilibili-video') || 'bilibili-video';
     rendered = truncateUnicode(rendered, MAX_BASENAME);

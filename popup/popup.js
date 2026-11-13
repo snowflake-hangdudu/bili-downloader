@@ -187,7 +187,7 @@ function formatTime(ts) {
 
 function isBiliDownloadUrl(url) {
 
-  return url && (/bilibili\.com\/video\//.test(url) || /bilibili\.com\/list\//.test(url) || isSpaceDownloadUrl(url));
+  return url && (/bilibili\.com\/video\//.test(url) || /bilibili\.com\/bangumi\/play\//.test(url) || /bilibili\.com\/list\//.test(url) || isSpaceDownloadUrl(url));
 
 }
 
@@ -300,6 +300,8 @@ async function loadHistory() {
 
 
 function historyEntryUrl(entry) {
+
+  if (/^\d+$/.test(String(entry?.epId || ''))) return `https://www.bilibili.com/bangumi/play/ep${entry.epId}`;
 
   if (!entry?.bvid) return null;
 

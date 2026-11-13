@@ -3,7 +3,7 @@
   "incognito": "split",
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.3.2",
+  "version": "1.3.7",
   "description": "__MSG_extDesc__",
   "permissions": ["activeTab", "scripting", "storage", "downloads", "clipboardWrite"],
   "host_permissions": [
@@ -21,6 +21,7 @@
       "matches": [
         "https://space.bilibili.com/*",
         "https://www.bilibili.com/video/*",
+        "https://www.bilibili.com/bangumi/play/*",
         "https://bilibili.com/video/*",
         "https://m.bilibili.com/video/*",
         "https://www.bilibili.com/list/*",
@@ -34,6 +35,7 @@
       "matches": [
         "https://space.bilibili.com/*",
         "https://www.bilibili.com/video/*",
+        "https://www.bilibili.com/bangumi/play/*",
         "https://bilibili.com/video/*",
         "https://m.bilibili.com/video/*",
         "https://www.bilibili.com/list/*",

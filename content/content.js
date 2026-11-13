@@ -34,6 +34,7 @@
   const CONTENT_CACHE_KEY = 'biliDlRemoteContent_v1';
   const PLUGIN_CATALOG_CACHE_KEY = 'biliDlPluginCatalog_v4_http';
   const FEEDBACK_EMAIL = 'hangdudu0@agent.qq.com';
+  const AFDIAN_URL = 'https://afdian.com/a/hangdudu';
   const DOWNLOAD_PREFS_KEY = 'biliDlDownloadPrefs_v1';
   const THEME_PREF_KEY = 'biliDlTheme_v1';
   function t(key, values) {
@@ -410,15 +411,15 @@
       if (!started?.ok && invalidFilename(started?.error) && fallbackTitle) {
         if (shouldCancel()) throw new Error('下载已取消');
         // Retry only a rejected filename, reusing the already downloaded Blob.
-        // A short title without emoji/control characters is the conservative save name.
-        const title = String(fallbackTitle).normalize('NFKC')
+        // Sanitize the rendered template name, preserving configured fields on retry.
+        const title = String(filename).replace(/\.(mp4|m4a)$/i, '').normalize('NFKC')
           .replace(/[\u{10000}-\u{10ffff}]/gu, '')
           .replace(/[\u0000-\u001F\u007F\uD800-\uDFFF\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFE00-\uFE0F]/g, '')
-          .replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
-        let base = Array.from(title).slice(0, 60).join('').replace(/[. ]+$/g, '') || 'bilibili-video';
+          .replace(/[\\/:*?"<>|~]/g, '_').replace(/\s+/g, ' ').trim();
+        let base = Array.from(title).slice(0, 120).join('').replace(/[. ]+$/g, '') || 'bilibili-video';
         if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base)) base = `_${base}`;
         filename = `${base}.${extension}`;
-        console.warn('[BiliDL] 文件名被拒绝，改用标题保存', filename);
+        console.warn('[BiliDL] 文件名被拒绝，使用安全化的模板文件名保存', filename);
         started = await EXT.runtime.sendMessage({ type: 'BILI_DL_SAVE_MEDIA', url, filename });
       }
       if (!started?.ok) throw new Error(started?.error || '无法创建浏览器下载');
@@ -666,7 +667,7 @@
           <div class="bili-dl-header">
             <div class="bili-dl-header-left">
               <img class="bili-dl-header-icon" src="${ICON_URL}" alt="" width="22" height="22">
-              <span class="bili-dl-title" data-i18n="appTitle">B站视频下载助手</span>
+              <span class="bili-dl-title" data-i18n="appTitle">B站bilibili下载助手</span>
               <span class="bili-dl-version">v${VERSION}</span>
             </div>
             <button id="bili-dl-close" data-i18n-aria="close" aria-label="关闭">&times;</button>
@@ -862,7 +863,7 @@
         </div>
       </div>
     `));
-    document.body.appendChild(panel);
+    document.documentElement.appendChild(panel);
 
     const themedPanel = panel.querySelector('#bili-dl-panel');
     document.addEventListener('pointerdown', (event) => {
@@ -1682,7 +1683,8 @@
       }
 
       function syncPresetFromTemplate() {
-        preset.value = matchPreset(templateInput.value.trim());
+        // Keep the editor open while editing, even if the text matches a preset.
+        preset.value = 'custom';
         syncCustomVisibility();
       }
 
@@ -1766,6 +1768,10 @@
       function queueSave() {
         status.textContent = '';
         clearTimeout(saveTimer);
+        const check = Filename.validateTemplate(currentTemplate());
+        if (!check.ok) return;
+        // New jobs must use the visible valid template before storage completes.
+        applyFilenameSettings({ filenameTemplate: check.template });
         saveTimer = setTimeout(() => { persist(true); }, 280);
       }
 
@@ -1859,14 +1865,26 @@
       pageEl?.classList.toggle('is-plugins', key === 'plugins');
       pageEl?.classList.toggle('is-donate', key === 'donate');
       if (key === 'donate') {
-        infoTitle.textContent = t('donateThanks');
+        infoTitle.textContent = t('donateStatementTitle');
         infoDate.textContent = '';
         infoDate.classList.add('hidden');
         clearNode(infoBody);
 
         const donation = document.createElement('section');
         donation.className = 'bili-dl-donate';
-        appendTextElement(donation, 'p', 'bili-dl-donate-intro', t('donateIntro'));
+        const statement = document.createElement('div');
+        statement.className = 'bili-dl-donate-statement';
+        appendTextElement(statement, 'p', '', t('donateStatementMaintainer'));
+        appendTextElement(statement, 'p', '', t('donateStatementAfdian'));
+        const afdian = document.createElement('a');
+        afdian.className = 'bili-dl-donate-afdian';
+        afdian.href = AFDIAN_URL;
+        afdian.target = '_blank';
+        afdian.rel = 'noopener noreferrer';
+        afdian.textContent = t('donateAfdianLink');
+        statement.appendChild(afdian);
+        appendTextElement(statement, 'p', '', t('donateStatementFree'));
+        donation.appendChild(statement);
 
         const methods = document.createElement('div');
         methods.className = 'bili-dl-donate-methods';
@@ -2529,6 +2547,8 @@
       });
       if (listQualitySection) listQualitySection.classList.toggle('hidden', !parts.includes('video'));
       updateListSelection();
+      updatePgcAccessRows();
+      schedulePgcAccessChecks();
       if (persist) saveDownloadPrefs();
     }
 
@@ -2538,9 +2558,10 @@
       listStartBtn.disabled = pendingListSync || listLoading || !count || !listContentParts(listDownloadKind).length || queueRunning || spaceGathering;
       listDownloadKindEl?.querySelectorAll('[data-list-content]').forEach((input) => { input.disabled = queueRunning || spaceGathering; });
       listStartBtn.textContent = !listContentParts(listDownloadKind).length ? t('listChooseContent') : count ? t('downloadSelectedCount', { count, kind: listDownloadKindLabel() }) : t('downloadSelectedKind', { kind: listDownloadKindLabel() });
-      const allSelected = listItems.length > 0 && listItems.every((item) => selectedListKeys.has(listItemKey(item)));
+      const selectable = listItems.filter(canSelectListItem);
+      const allSelected = selectable.length > 0 && selectable.every((item) => selectedListKeys.has(listItemKey(item)));
       listSelectAllBtn.textContent = allSelected ? t('deselectAll') : t('selectAll');
-      listSelectAllBtn.disabled = !listItems.length;
+      listSelectAllBtn.disabled = !selectable.length;
       listSelectAllBtn.setAttribute('aria-pressed', String(allSelected));
     }
 
@@ -2563,6 +2584,83 @@
       listRetryFailedBtn.disabled = queueRunning;
       listRetryFailedBtn.textContent = count ? t('retryIncompleteCount', { count }) : t('retryIncomplete');
       listResultEl?.classList.toggle('hidden', !count && !listStatusEl.textContent);
+    }
+
+    const pgcAccessCache = new Map();
+    const pgcAccessPending = new Set();
+    let pgcAccessWorkers = 0;
+    function pgcAccessKey(item) { return `${item.epId}:${item.aid}:${item.cid}`; }
+    function pgcAccess(item) {
+      const entry = pgcAccessCache.get(pgcAccessKey(item));
+      return entry && Date.now() - entry.at < 180000 ? entry : null;
+    }
+    function canSelectListItem(item) {
+      if (!item?.epId) return true;
+      const parts = listContentParts(listDownloadKind);
+      if (!parts.length) return false;
+      if (parts.every(part => part === 'cover')) return Boolean(item.cover || item.pic);
+      const access = pgcAccess(item);
+      return access?.state === 'checked'
+        && (!parts.includes('video') || access.video)
+        && (!parts.includes('audio') || access.audio);
+    }
+    function pgcAccessLabel(item) {
+      const parts = listContentParts(listDownloadKind);
+      if (parts.length && parts.every(part => part === 'cover')) return t('pgcCoverOnly');
+      const access = pgcAccess(item);
+      if (!access) return t('pgcChecking');
+      if (access.reason) return t({ preview: 'pgcPreview', region: 'pgcRegion', protected: 'pgcProtected', permission: 'pgcPermission', error: 'pgcCheckError' }[access.reason]);
+      return canSelectListItem(item) ? t('pgcAvailable') : t('pgcNoTrack');
+    }
+    function updatePgcAccessRows() {
+      const items = new Map(listItems.map(item => [listItemKey(item), item]));
+      const pgcItems = listItems.filter(item => item.epId);
+      if (pgcItems.length) {
+        const coverOnly = listContentParts(listDownloadKind).every(part => part === 'cover');
+        const checking = coverOnly ? 0 : pgcItems.filter(item => !pgcAccess(item)).length;
+        const available = pgcItems.filter(canSelectListItem).length;
+        listCountEl.textContent = t('pgcAccessSummary', {
+          total: listItems.length, available, checking,
+          unavailable: pgcItems.length - available - checking
+        });
+      }
+      listItemsEl.querySelectorAll('input[data-list-key]').forEach(input => {
+        const item = items.get(input.dataset.listKey);
+        if (!item?.epId) return;
+        const allowed = canSelectListItem(item);
+        const row = input.closest('label');
+        input.disabled = !allowed;
+        row.classList.toggle('is-unavailable', !allowed);
+        row.setAttribute('aria-disabled', String(!allowed));
+        row.querySelector('.bili-dl-pgc-access').textContent = pgcAccessLabel(item);
+        if (!allowed) { input.checked = false; selectedListKeys.delete(listItemKey(item)); }
+      });
+      updateListSelection();
+    }
+    function schedulePgcAccessChecks() {
+      if (!isOpen || activeMode !== 'list' || queueRunning || document.hidden) return;
+      if (!listContentParts(listDownloadKind).some(part => part !== 'cover')) return;
+      while (pgcAccessWorkers < 2) {
+        const item = listItems.find(item => item.epId && !pgcAccess(item) && !pgcAccessPending.has(pgcAccessKey(item)));
+        if (!item) break;
+        const key = pgcAccessKey(item);
+        pgcAccessPending.add(key);
+        pgcAccessWorkers++;
+        void (async () => {
+          try {
+            const result = await agentCall('CHECK_PGC_ACCESS', { epId: item.epId, aid: item.aid, cid: item.cid });
+            pgcAccessCache.set(key, { ...result, at: Date.now() });
+          } catch {
+            pgcAccessCache.set(key, { state: 'error', reason: 'error', at: Date.now() });
+          } finally {
+            updatePgcAccessRows();
+            await new Promise(resolve => setTimeout(resolve, 350));
+            pgcAccessPending.delete(key);
+            pgcAccessWorkers--;
+            schedulePgcAccessChecks();
+          }
+        })();
+      }
     }
 
     function listItemKey(item) {
@@ -2593,6 +2691,7 @@
         checkbox.dataset.listKey = listItemKey(item);
         checkbox.checked = selectedListKeys.has(listItemKey(item));
         checkbox.addEventListener('change', () => {
+          if (!canSelectListItem(item)) { checkbox.checked = false; return; }
           if (checkbox.checked) {
             selectedListKeys.add(listItemKey(item));
           } else selectedListKeys.delete(listItemKey(item));
@@ -2610,6 +2709,12 @@
         const detail = document.createElement('small');
         detail.textContent = [item.views, item.duration ? formatDuration(item.duration) : ''].filter(Boolean).join(' · ');
         meta.append(title, detail);
+        if (item.epId) {
+          const access = document.createElement('small');
+          access.className = 'bili-dl-pgc-access';
+          access.setAttribute('aria-live', 'polite');
+          meta.appendChild(access);
+        }
         label.append(checkbox, ordinal, meta);
         fragment.appendChild(label);
       });
@@ -2620,7 +2725,8 @@
         empty.textContent = listFilter === 'selected' ? t('emptyFilterSelected') : t('emptyFilterSearch');
         listItemsEl.appendChild(empty);
       }
-      updateListSelection();
+      updatePgcAccessRows();
+      schedulePgcAccessChecks();
     }
 
     function mergeListItems(items) {
@@ -2641,7 +2747,7 @@
 
     async function ensureListItemVideoIds(item) {
       if (item?.aid && item?.cid) return item;
-      const resolved = await agentCall('RESOLVE_VIDEO', { href: `https://www.bilibili.com/video/${item.bvid}`, pageIndex: Number(item.pageIndex) || 0 });
+      const resolved = await agentCall('RESOLVE_VIDEO', { href: item.epId ? `https://www.bilibili.com/bangumi/play/ep${item.epId}` : `https://www.bilibili.com/video/${item.bvid}`, pageIndex: Number(item.pageIndex) || 0 });
       item.aid = String(resolved.info.aid || item.aid || '');
       item.cid = String(resolved.info.cid || item.cid || '');
       item.cover = item.cover || resolved.info.pic || '';
@@ -2756,6 +2862,7 @@
     }
 
     async function loadListItems(force = false) {
+      if (force && !listLoading) pgcAccessCache.clear();
       if (isSpaceCollectionsIndex()) return;
       if (listLoading) { if (force) pendingListSync = true; return; }
       // Explicit gather-all opens this list while spaceGathering is true.
@@ -2866,7 +2973,11 @@
         button.setAttribute('aria-selected', String(active));
       });
       homeEl.scrollTop = 0;
-      if (mode === 'list') await loadListItems(refreshList && !queueRunning);
+      if (mode === 'list') {
+        await loadListItems(refreshList && !queueRunning);
+        updatePgcAccessRows();
+        schedulePgcAccessChecks();
+      }
     }
 
     function showErrorWithFaq(text, anchor) {
@@ -2935,6 +3046,7 @@
           const est = await agentCall('GET_ESTIMATE', {
             aid: videoInfo.aid,
             cid: videoInfo.cid,
+            epId: videoInfo.epId,
             duration: videoInfo.duration,
             audioOnly: true
           });
@@ -2963,6 +3075,7 @@
         const est = await agentCall('GET_ESTIMATE', {
           aid: videoInfo.aid,
           cid: videoInfo.cid,
+          epId: videoInfo.epId,
           qn: selectedQn,
           duration: videoInfo.duration,
           streamPreference
@@ -3436,7 +3549,7 @@
       let qRes = { qualities: [], maxLabel: '', loginHint: null };
       let qualityError = '';
       try {
-        qRes = await agentCall('GET_QUALITIES', { aid: res.info.aid, cid: res.info.cid });
+        qRes = await agentCall('GET_QUALITIES', { aid: res.info.aid, cid: res.info.cid, epId: res.info.epId });
       } catch (error) {
         qualityError = error?.message || String(error);
       }
@@ -3858,6 +3971,7 @@
         const result = await agentCall('START_DOWNLOAD', {
           aid: info.aid,
           cid: info.cid,
+          epId: info.epId,
           title: info.title,
           filenameBase,
           audioOnly: true,
@@ -3875,6 +3989,7 @@
       const result = await agentCall('START_DOWNLOAD', {
         aid: info.aid,
         cid: info.cid,
+        epId: info.epId,
         qn,
         streamPreference: streamSelection,
         title: info.title,
@@ -3883,6 +3998,31 @@
         jobId
       }, 0);
 
+      if (Number(result.actualQn) > 0 && Number(result.actualQn) !== Number(qn)) {
+        const actualLabel = result.actualLabel || `${result.actualQn}P`;
+        const adjustedBase = buildFilenameBase(info, result.actualQn, 'mp4', {
+          filenameTemplate: opts.filenameTemplate || job?.filenameTemplate || filenameTemplate,
+          createdAt: opts.createdAt || job?.createdAt,
+          index: opts.index ?? job?.index ?? 1,
+          pageIndex: opts.pageIndex ?? job?.pageIndex,
+          part: opts.part ?? job?.part,
+          partTitle: opts.partTitle || job?.partTitle || info.partTitle,
+          qualityLabel: actualLabel
+        });
+        result.filename = `${adjustedBase}.mp4`;
+        if (job) {
+          job.label = actualLabel;
+          job.filenameBase = adjustedBase;
+          const label = job.cardEl?.querySelector('.bili-dl-progress-q');
+          if (label) label.textContent = actualLabel;
+        }
+        debugLog('清晰度', `片源发生变化：请求 ${qn}，实际 ${result.actualQn}（${actualLabel}），已同步文件名`);
+        if (videoInfo?.aid === info.aid && videoInfo?.cid === info.cid) {
+          snapshotCache = null;
+          const remaining = qualities.filter(quality => Number(quality.qn) !== Number(qn) && Number(quality.qn) !== Number(result.actualQn));
+          renderQualityPills([...remaining, { qn: Number(result.actualQn), label: actualLabel, mode: result.dash === false ? 'durl' : 'dash' }]);
+        }
+      }
       if (result.blob) {
         updateProgress('save', 95, 0, 0, jobId);
         const blob = result.blob || new Blob([result.mp4], { type: 'video/mp4' });
@@ -3957,6 +4097,7 @@
             const fmt = result.audioOnly ? 'm4a' : 'mp4';
             addHistory({
               bvid: job.info.bvid,
+              epId: job.info.epId,
               aid: job.info.aid,
               cid: job.info.cid,
               pageIndex: job.pageIndex,
@@ -4038,7 +4179,7 @@
       if (shouldCancel()) throw new Error('下载已取消');
       let cover = item.cover || item.pic;
       if (!cover) {
-        const resolved = await agentCall('RESOLVE_VIDEO', { href: `https://www.bilibili.com/video/${item.bvid}`, pageIndex: Number(item.pageIndex) || 0 });
+        const resolved = await agentCall('RESOLVE_VIDEO', { href: item.epId ? `https://www.bilibili.com/bangumi/play/ep${item.epId}` : `https://www.bilibili.com/video/${item.bvid}`, pageIndex: Number(item.pageIndex) || 0 });
         cover = resolved.info?.pic;
         item.cover = cover || '';
       }
@@ -4168,8 +4309,8 @@
                 });
                 ok++;
                 setTaskState(job, TASK_STATE.completed);
-                await addHistory({ bvid: job.info.bvid, aid: job.info.aid, cid: job.info.cid,
-                  pageIndex: entry.index, title: job.info.title, label: entry.label, format: entry.format, downloadId: savedResult.downloadId, ts: Date.now() });
+                await addHistory({ bvid: job.info.bvid, epId: job.info.epId, aid: job.info.aid, cid: job.info.cid,
+                  pageIndex: entry.index, title: job.info.title, label: savedResult.actualLabel || entry.label, format: entry.format, downloadId: savedResult.downloadId, ts: Date.now() });
                 return;
               } catch (error) {
                 const problem = classifyDownloadError(error);
@@ -4241,7 +4382,7 @@
       const isRetry = Array.isArray(retryTasks);
       const items = isRetry
         ? retryTasks.map((entry) => entry.item).filter(Boolean)
-        : listItems.filter((item) => selectedListKeys.has(listItemKey(item)));
+        : listItems.filter((item) => selectedListKeys.has(listItemKey(item)) && canSelectListItem(item));
       if (!items.length || queueRunning || spaceGathering || (!isRetry && !listContentParts(listDownloadKind).length)) return;
       if (activeJobs.size > 0) {
         setListStatus(t('listWaitCurrent'), 'error');
@@ -4355,7 +4496,7 @@
             let actualLabel = '音频';
             if (wantsVideo) {
               if (queueCancelled) throw new Error('下载已取消');
-              const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid });
+              const qualityData = await agentCall('GET_QUALITIES', { aid: item.aid, cid: item.cid, epId: item.epId });
               if (queueCancelled) throw new Error('下载已取消');
               const available = qualityData.qualities || [];
               if (!isRetry && queueStrategy === 'highest' && available.length) {
@@ -4397,10 +4538,12 @@
                 createdAt: job.createdAt, index: job.index, qualityLabel: actualLabel,
                 reuseAudio: wantsAudio
               });
+              if (videoResult.actualLabel) actualLabel = videoResult.actualLabel;
+              if (Number(videoResult.actualQn) > 0 && Number(videoResult.actualQn) !== Number(qn)) wasDowngraded = Number(videoResult.actualQn) < Number(qn);
               job.videoSaved = true;
               retryTask.downloadKind = outputs.filter(part => !job[`${part}Saved`]).join('+');
               await checkpoint();
-              await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: Number(item.pageIndex) || 0, title: item.title, label: `视频 · ${actualLabel}`, format: 'mp4', downloadId: videoResult?.downloadId, downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '视频已保存，历史记录写入失败：' + error.message));
+              await addHistory({ bvid: item.bvid, epId: item.epId, aid: item.aid, cid: item.cid, pageIndex: Number(item.pageIndex) || 0, title: item.title, label: `视频 · ${actualLabel}`, format: 'mp4', downloadId: videoResult?.downloadId, downgraded: wasDowngraded, ts: Date.now() }).catch((error) => debugLog('历史', '视频已保存，历史记录写入失败：' + error.message));
             }
             if (wantsAudio) {
               if (wantsVideo && wantsAudio) {
@@ -4420,7 +4563,7 @@
               job.audioSaved = true;
               retryTask.downloadKind = outputs.filter(part => !job[`${part}Saved`]).join('+');
               await checkpoint();
-              await addHistory({ bvid: item.bvid, aid: item.aid, cid: item.cid, pageIndex: Number(item.pageIndex) || 0, title: item.title, label: '音频', format: 'm4a', downloadId: (reused || audioResult)?.downloadId, ts: Date.now() }).catch((error) => debugLog('历史', '音频已保存，历史记录写入失败：' + error.message));
+              await addHistory({ bvid: item.bvid, epId: item.epId, aid: item.aid, cid: item.cid, pageIndex: Number(item.pageIndex) || 0, title: item.title, label: '音频', format: 'm4a', downloadId: (reused || audioResult)?.downloadId, ts: Date.now() }).catch((error) => debugLog('历史', '音频已保存，历史记录写入失败：' + error.message));
             }
             if (wantsCover) {
               await saveListCover(item, () => queueCancelled || job.cancelRequested, {
@@ -4508,13 +4651,13 @@
 
     function placeMenu() {
       const rect = fabPanel.getBoundingClientRect();
-      const { width, height } = getFabViewport();
-      const margin = 16;
+      const { width, height, left, top } = getFabViewport();
+      const margin = Math.min(16, width / 4, height / 4);
       const gap = 12;
       const menuWidth = Math.max(1, Math.min(408, width - margin * 2));
-      const menuLeft = Math.max(margin, Math.min(rect.right - menuWidth, width - margin - menuWidth));
-      const spaceAbove = Math.max(0, rect.top - gap - margin);
-      const spaceBelow = Math.max(0, height - rect.bottom - gap - margin);
+      const menuLeft = Math.max(left + margin, Math.min(rect.right - menuWidth, left + width - margin - menuWidth));
+      const spaceAbove = Math.max(0, rect.top - top - gap - margin);
+      const spaceBelow = Math.max(0, top + height - rect.bottom - gap - margin);
       const openBelow = spaceAbove < 280 && spaceBelow > spaceAbove;
       const menuHeight = Math.max(1, Math.min(650, openBelow ? spaceBelow : spaceAbove));
       menu.style.width = menuWidth + 'px';
@@ -4605,9 +4748,10 @@
       input.onchange = () => setListDownloadKind(Array.from(listDownloadKindEl.querySelectorAll('[data-list-content]:checked')).map((el) => el.dataset.listContent).join('+'));
     });
     listSelectAllBtn.onclick = () => {
-      const allSelected = listItems.length > 0 && listItems.every((item) => selectedListKeys.has(listItemKey(item)));
+      const selectable = listItems.filter(canSelectListItem);
+      const allSelected = selectable.length > 0 && selectable.every((item) => selectedListKeys.has(listItemKey(item)));
       if (allSelected) selectedListKeys.clear();
-      else listItems.forEach((item) => selectedListKeys.add(listItemKey(item)));
+      else selectable.forEach((item) => selectedListKeys.add(listItemKey(item)));
       if (listFilter === 'selected') renderListItems();
       else {
         listItemsEl.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = selectedListKeys.has(input.dataset.listKey || input.dataset.bvid); });
@@ -4684,19 +4828,26 @@
     let preferredFabPos = null;
 
     function getFabViewport() {
+      const visual = window.visualViewport;
       return {
-        width: document.documentElement.clientWidth || window.innerWidth,
-        height: window.innerHeight
+        width: visual?.width || document.documentElement.clientWidth || window.innerWidth,
+        height: visual?.height || window.innerHeight,
+        left: visual?.offsetLeft || 0,
+        top: visual?.offsetTop || 0
       };
     }
 
     function clampFabPos(left, top) {
-      const { width, height } = getFabViewport();
-      const maxL = Math.max(FAB_MARGIN, width - FAB_SIZE - FAB_MARGIN);
-      const maxT = Math.max(FAB_MARGIN, height - FAB_SIZE - FAB_MARGIN);
+      const viewport = getFabViewport();
+      const marginX = Math.min(FAB_MARGIN, Math.max(0, (viewport.width - FAB_SIZE) / 2));
+      const marginY = Math.min(FAB_MARGIN, Math.max(0, (viewport.height - FAB_SIZE) / 2));
+      const minL = viewport.left + marginX;
+      const minT = viewport.top + marginY;
+      const maxL = Math.max(minL, viewport.left + viewport.width - FAB_SIZE - marginX);
+      const maxT = Math.max(minT, viewport.top + viewport.height - FAB_SIZE - marginY);
       return {
-        left: Math.min(Math.max(left, FAB_MARGIN), maxL),
-        top: Math.min(Math.max(top, FAB_MARGIN), maxT)
+        left: Math.min(Math.max(Number.isFinite(left) ? left : maxL, minL), maxL),
+        top: Math.min(Math.max(Number.isFinite(top) ? top : maxT, minT), maxT)
       };
     }
 
@@ -4709,25 +4860,11 @@
       return p;
     }
 
-    function findVideoPlayer() {
-      const nodes = document.querySelectorAll('.bpx-player-video-area, .bpx-player-video-wrap, #bilibili-player video, #bilibili-player');
-      for (const node of nodes) {
-        const rect = node.getBoundingClientRect();
-        if (rect.width > 240 && rect.height > 140) return node;
-      }
-      return null;
-    }
-
     function defaultFabPoint() {
-      const { width, height } = getFabViewport();
-      const player = findVideoPlayer();
-      if (player) {
-        const rect = player.getBoundingClientRect();
-        return { left: rect.right, top: rect.bottom - FAB_SIZE };
-      }
+      const { width, height, left, top } = getFabViewport();
       return {
-        left: width - FAB_SIZE - Math.max(16, width * 0.03),
-        top: height - FAB_SIZE - Math.max(16, height * 0.04)
+        left: left + width - FAB_SIZE - Math.max(FAB_MARGIN, width * 0.03),
+        top: top + height - FAB_SIZE - Math.max(FAB_MARGIN, height * 0.04)
       };
     }
 
@@ -4737,23 +4874,6 @@
     }
 
     applyDefaultFabPos();
-    let fabPlayerObserver = null;
-    function bindFabPlayerObserver() {
-      const player = findVideoPlayer();
-      if (!player || fabPlayerObserver || typeof ResizeObserver === 'undefined') return;
-      fabPlayerObserver = new ResizeObserver(() => {
-        if (!hasCustomFabPos && !dragActive) applyDefaultFabPos();
-      });
-      fabPlayerObserver.observe(player);
-    }
-    [400, 1200, 2500].forEach((delay) => {
-      setTimeout(() => {
-        if (hasCustomFabPos || dragActive) return;
-        bindFabPlayerObserver();
-        applyDefaultFabPos();
-        placeMenu();
-      }, delay);
-    });
 
     function onFabPointerMove(e) {
       if (!dragActive || e.pointerId !== dragPointerId) return;
@@ -4787,7 +4907,7 @@
         const r = fabPanel.getBoundingClientRect();
         const p = applyFabPos(r.left, r.top);
         preferredFabPos = p;
-        EXT.storage.local.set({ biliDlFabPos: { ...p, v: 3 } }).catch(() => {});
+        EXT.storage.local.set({ biliDlFabPos: { ...p, v: 4, extensionVersion: VERSION } }).catch(() => {});
         placeMenu();
       }
       // 延后清标记，避免紧随其后的 click 误开面板
@@ -4822,7 +4942,7 @@
     // 恢复上次拖拽位置；窗口缩放时夹回可视区
     EXT.storage.local.get('biliDlFabPos').then(({ biliDlFabPos: pos }) => {
       if (dragActive || hasCustomFabPos) return;
-      if (pos && pos.v === 3 && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
+      if (pos && pos.v === 4 && pos.extensionVersion === VERSION && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
         hasCustomFabPos = true;
         preferredFabPos = { left: pos.left, top: pos.top };
         applyFabPos(pos.left, pos.top);
@@ -4830,20 +4950,39 @@
       placeMenu();
     }).catch(() => {});
 
-    let fabResizeTimer = 0;
-    window.addEventListener('resize', () => {
-      clearTimeout(fabResizeTimer);
-      fabResizeTimer = setTimeout(() => {
+    let fabResizeFrame = 0;
+    function keepFabVisible() {
+      cancelAnimationFrame(fabResizeFrame);
+      fabResizeFrame = requestAnimationFrame(() => {
         if (dragActive) return;
-        if (!hasCustomFabPos) {
-          applyDefaultFabPos();
-          placeMenu();
-          return;
-        }
-        if (!preferredFabPos) return;
-        applyFabPos(preferredFabPos.left, preferredFabPos.top);
+        if (hasCustomFabPos && preferredFabPos) applyFabPos(preferredFabPos.left, preferredFabPos.top);
+        else applyDefaultFabPos();
         placeMenu();
-      }, 100);
+      });
+    }
+    window.addEventListener('resize', keepFabVisible);
+    window.addEventListener('pageshow', keepFabVisible);
+    window.visualViewport?.addEventListener('resize', keepFabVisible);
+    window.visualViewport?.addEventListener('scroll', keepFabVisible);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) keepFabVisible(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && activeMode === 'list') {
+        updatePgcAccessRows();
+        schedulePgcAccessChecks();
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      // A browser fullscreen element is rendered above normal page stacking.
+      const full = document.fullscreenElement;
+      const host = full && !/^(VIDEO|IFRAME)$/.test(full.tagName) ? full : document.documentElement;
+      if (panel.parentElement !== host && !panel.contains(host)) host.appendChild(panel);
+      keepFabVisible();
+    });
+    EXT.storage.onChanged?.addListener((changes, area) => {
+      if (area !== 'local' || !changes.biliDlFabPos || changes.biliDlFabPos.newValue) return;
+      hasCustomFabPos = false;
+      preferredFabPos = null;
+      keepFabVisible();
     });
 
     window.__BILI_DL_API__ = {
@@ -4944,6 +5083,7 @@
     function onUrlChanged() {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
+      keepFabVisible();
       listViewRevision++;
       pendingListSync = true;
       const p = Number(new URL(location.href).searchParams.get('p')) || 0;
